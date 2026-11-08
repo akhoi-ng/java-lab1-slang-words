@@ -1,2 +1,16 @@
 __pycache__/
 *.pyc
+
+# Maven build output
+target/
+
+# Runtime data the app creates next to the jar (dictionary.dat, history, settings)
+/data/
+
+# IDE metadata
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.factorypath
