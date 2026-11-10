@@ -9,6 +9,7 @@ import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -75,8 +76,11 @@ public class DictionaryStore implements AutoCloseable {
             "maxarray=20000000;lab01.slangdict._24127430.**;java.util.*;java.lang.*;!*");
 
     private static final long FLUSH_TIMEOUT_SECONDS = 30;
-    /** Serialize cây (Trie, BK-tree) là đệ quy theo độ sâu: cho luồng ghi stack rộng hơn mặc định cho chắc. */
-    private static final long WRITER_STACK_BYTES = 16L * 1024 * 1024;
+    /**
+     * Serialize cây (BK-tree; Trie trong file do bản cũ ghi) là đệ quy theo độ sâu: luồng ghi và luồng đọc
+     * đều dùng stack rộng hơn mặc định, để file nào ghi được thì cũng đọc lại được.
+     */
+    private static final long LARGE_STACK_BYTES = 16L * 1024 * 1024;
     private static final int MOVE_ATTEMPTS = 5;
     private static final long MOVE_RETRY_DELAY_MS = 50;
 
@@ -107,7 +111,7 @@ public class DictionaryStore implements AutoCloseable {
     private final long saveDelayMillis;
 
     private final ScheduledThreadPoolExecutor writer = new ScheduledThreadPoolExecutor(1, runnable -> {
-        Thread thread = new Thread(null, runnable, "dictionary-writer", WRITER_STACK_BYTES);
+        Thread thread = new Thread(null, runnable, "dictionary-writer", LARGE_STACK_BYTES);
         thread.setDaemon(true); // không giữ JVM sống; lúc thoát app gọi flush() để chờ ghi xong
         return thread;
     });
@@ -159,9 +163,49 @@ public class DictionaryStore implements AutoCloseable {
      * @throws IOException               lỗi đọc đĩa (không tồn tại, không có quyền...)
      */
     public static SlangDictionary load(Path file) throws IOException {
-        try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
-            return deserialize(in);
+        // Đọc trên luồng có stack rộng như luồng ghi: file do bản cũ ghi (Trie serialize đệ quy theo độ dài tên)
+        // vẫn đọc lại được, thay vì ghi được mà không đọc được.
+        return onLargeStack("dictionary-reader", () -> {
+            try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
+                return deserialize(in);
+            }
+        });
+    }
+
+    /** Việc đọc/ghi có thể ném IOException, chạy trên luồng riêng. */
+    private interface IoTask<T> {
+        T run() throws IOException;
+    }
+
+    /** Chạy {@code task} trên một luồng mới có stack {@link #LARGE_STACK_BYTES}, chờ xong rồi trả kết quả. */
+    private static <T> T onLargeStack(String name, IoTask<T> task) throws IOException {
+        AtomicReference<T> result = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread thread = new Thread(null, () -> {
+            try {
+                result.set(task.run());
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, name, LARGE_STACK_BYTES);
+        thread.start();
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("Interrupted while reading the dictionary file");
         }
+        Throwable t = failure.get();
+        if (t instanceof IOException io) {
+            throw io;
+        }
+        if (t instanceof RuntimeException runtime) {
+            throw runtime;
+        }
+        if (t instanceof Error error) {
+            throw error;
+        }
+        return result.get();
     }
 
     static byte[] serialize(SlangDictionary dictionary) throws IOException {
@@ -225,6 +269,10 @@ public class DictionaryStore implements AutoCloseable {
             // Dữ liệu rác sau một header hợp lệ có thể làm readObject của collection ném lỗi runtime bất kỳ;
             // coi như file hỏng để loadOrBuild build lại thay vì làm sập app lúc khởi động.
             throw new DictionaryFormatException("Corrupted dictionary file: " + e, e);
+        } catch (StackOverflowError e) {
+            // Cấu trúc lồng quá sâu kể cả với stack rộng: không đọc được thì coi như file hỏng,
+            // không để Error lọt ra làm app thoát ngay lúc khởi động.
+            throw new DictionaryFormatException("Dictionary file is nested too deeply to read", e);
         }
     }
 
@@ -348,8 +396,9 @@ public class DictionaryStore implements AutoCloseable {
             writeAtomically(serialize(dictionary), dictionaryFile);
         } catch (IOException e) {
             errorListener.accept(e);
-        } catch (RuntimeException e) {
-            // Không để lỗi bất ngờ bị executor nuốt mất một cách im lặng
+        } catch (RuntimeException | Error e) {
+            // Không để lỗi bất ngờ bị executor nuốt mất một cách im lặng. Error cũng vậy (ví dụ StackOverflowError):
+            // FutureTask giữ nó lại mà không ai đọc, mọi lần lưu sau đó thất bại mà người dùng không hề biết.
             errorListener.accept(new IOException("Unexpected error while saving", e));
         }
     }

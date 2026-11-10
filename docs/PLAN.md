@@ -129,6 +129,7 @@ Các method:
   - `loadOriginal()`: dùng cho Reset
   - Ghi nền an toàn: ~~serialize ra `byte[]` ngay trên luồng gọi~~ → **đã đổi khi làm:** đo được serialize 100k mất ~2 s (UI sẽ đứng sau mỗi add/edit/delete), nên `saveInBackground` trả về ngay, **luồng nền vừa serialize vừa ghi**. Snapshot vẫn nhất quán vì `SlangDictionary.writeObject` và `add/replace/remove` cùng `synchronized` (kiểu `java.util.Vector`). Nhiều lần lưu dồn dập chỉ ghi 1 lần. Cung cấp `flush()` để chờ ghi xong khi thoát app (App gọi qua shutdown hook)
   - Số đo (máy dev): 7,6k entry: build ~50–100 ms, đọc .dat ~45–110 ms, file 2,3 MB · 100k entry: build ~1,6–3,3 s, đọc .dat ~0,8–1,5 s, serialize ~1,5–2,5 s, file 30 MB
+  - **Đo lại sau khi sửa C1** (Trie ghi phẳng, 11/11/2026, JDK 25): 7,6k: đọc .dat 40–200 ms, file 2,0 MB · 100k: đọc .dat 0,6–0,7 s, ghi 1,3–1,4 s, file 27 MB. Chi tiết ở ARCHITECTURE.md mục 4.8
   - **Sửa ở bước 10:** luồng ghi giữ khóa từ điển suốt lúc serialize (100k: ~2 s), nên lần tìm lại ngay sau khi thêm/sửa/xóa phải đứng chờ và màn hình hiện "~2000 ms". Đã thêm: `createDefault()` hoãn ghi **1,5 s sau lần sửa cuối** (debounce, constructor 2 tham số vẫn ghi ngay để test cũ giữ nguyên); `flush()` ghi ngay lần đang hẹn giờ; `SearchService` đo giờ **sau khi** lấy được khóa
 - `App`: load dữ liệu trước khi hiện giao diện, tạm in log số entry + thời gian (bước 7 sẽ thay bằng màn hình loading)
 - **Test** (dùng `@TempDir`): save rồi load ra đúng dữ liệu; file `.dat` hỏng thì build lại từ text; lần chạy thứ 2 đọc từ DAT

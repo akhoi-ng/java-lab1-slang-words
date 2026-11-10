@@ -51,11 +51,19 @@ public class DictionaryService {
         NAME_EMPTY,
         /** Tên chứa dấu ` (ký tự tách tên/nghĩa trong slang.txt) hoặc xuống dòng. */
         NAME_INVALID,
+        /** Tên dài quá {@link #MAX_NAME_LENGTH} ký tự (sau khi bỏ khoảng trắng hai đầu). */
+        NAME_TOO_LONG,
         /** Không có nghĩa nào (sau khi bỏ các dòng trống). */
         NO_MEANING,
         /** Một nghĩa chứa dấu | (ký tự tách các nghĩa trong slang.txt) hoặc xuống dòng. */
         MEANING_INVALID
     }
+
+    /**
+     * Độ dài tối đa của tên slang. Slang dài nhất trong slang.txt gốc chỉ 15 ký tự; giới hạn này chặn việc dán nhầm
+     * cả đoạn văn vào ô tên (mỗi ký tự của tên là một tầng trong Trie, tên quá dài làm các thao tác trên cây rất sâu).
+     */
+    public static final int MAX_NAME_LENGTH = 100;
 
     private final DictionaryStore store;
     private volatile SlangDictionary dictionary;
@@ -113,6 +121,9 @@ public class DictionaryService {
         }
         if (!isValidName(slang)) {
             return Optional.of(Problem.NAME_INVALID);
+        }
+        if (slang.strip().length() > MAX_NAME_LENGTH) {
+            return Optional.of(Problem.NAME_TOO_LONG);
         }
         for (String meaning : meanings) {
             if (meaning != null && !isValidMeaning(meaning)) {

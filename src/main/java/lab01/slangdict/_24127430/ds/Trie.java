@@ -1,8 +1,13 @@
 package lab01.slangdict._24127430.ds;
 
+import java.io.InvalidObjectException;
+import java.io.ObjectStreamException;
 import java.io.Serializable;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -64,27 +69,27 @@ public class Trie<V> implements Serializable {
 
     /** Gỡ value khỏi key, đồng thời cắt bỏ các nút không còn dùng. */
     public boolean remove(String key, V value) {
-        return remove(root, key, 0, value);
-    }
-
-    private boolean remove(Node<V> node, String key, int depth, V value) {
-        if (depth == key.length()) {
-            if (node.values == null || !node.values.remove(value)) {
+        // Vòng lặp thay cho đệ quy: độ sâu bằng độ dài key, key dài thì đệ quy sẽ tràn stack
+        @SuppressWarnings("unchecked")
+        Node<V>[] path = (Node<V>[]) new Node[key.length() + 1];
+        path[0] = root;
+        for (int i = 0; i < key.length(); i++) {
+            path[i + 1] = path[i].child(key.charAt(i));
+            if (path[i + 1] == null) {
                 return false;
             }
-            if (node.values.isEmpty()) {
-                node.values = null;
-                keyCount--;
-            }
-            return true;
         }
-        char c = key.charAt(depth);
-        Node<V> child = node.child(c);
-        if (child == null || !remove(child, key, depth + 1, value)) {
+        Node<V> node = path[key.length()];
+        if (node.values == null || !node.values.remove(value)) {
             return false;
         }
-        if (child.isEmpty()) {
-            node.children.remove(c);
+        if (node.values.isEmpty()) {
+            node.values = null;
+            keyCount--;
+        }
+        // Cắt các nút không còn dùng, từ dưới lên
+        for (int depth = key.length(); depth > 0 && path[depth].isEmpty(); depth--) {
+            path[depth - 1].children.remove(key.charAt(depth - 1));
         }
         return true;
     }
@@ -108,22 +113,29 @@ public class Trie<V> implements Serializable {
         return result;
     }
 
-    private void collect(Node<V> node, List<V> out, int limit) {
-        if (node.values != null) {
-            for (V v : node.values) {
-                if (out.size() >= limit) {
-                    return;
+    /** DFS theo thứ tự trước (nút, rồi các con theo thứ tự ký tự), dùng ngăn xếp tường minh thay cho đệ quy. */
+    private void collect(Node<V> start, List<V> out, int limit) {
+        Deque<Iterator<Node<V>>> stack = new ArrayDeque<>();
+        Node<V> node = start;
+        while (true) {
+            if (node.values != null) {
+                for (V v : node.values) {
+                    if (out.size() >= limit) {
+                        return;
+                    }
+                    out.add(v);
                 }
-                out.add(v);
             }
-        }
-        if (node.children != null) {
-            for (Node<V> child : node.children.values()) {
-                if (out.size() >= limit) {
-                    return;
-                }
-                collect(child, out, limit);
+            if (node.children != null && !node.children.isEmpty()) {
+                stack.push(node.children.values().iterator());
             }
+            while (!stack.isEmpty() && !stack.peek().hasNext()) {
+                stack.pop();
+            }
+            if (stack.isEmpty() || out.size() >= limit) {
+                return;
+            }
+            node = stack.peek().next();
         }
     }
 
@@ -138,5 +150,93 @@ public class Trie<V> implements Serializable {
     /** Số key khác nhau đang có value. */
     public int keyCount() {
         return keyCount;
+    }
+
+    // ===================== Serialize =====================
+
+    /*
+     * Serialize mặc định đi theo từng tầng Node → TreeMap → Node, tức đệ quy theo độ dài key: một tên slang
+     * dài vài trăm ký tự đủ làm ObjectInputStream tràn stack khi đọc lại, và app không mở lại được nữa.
+     * Vì vậy Trie được ghi dưới dạng phẳng (danh sách key → value, duyệt bằng vòng lặp) rồi chèn lại khi đọc.
+     * File .dat cũ (ghi theo dạng mặc định) vẫn đọc được vì Trie và Node giữ nguyên field và serialVersionUID.
+     */
+
+    /** Ghi {@link SerializedForm} thay cho chính object này. */
+    private Object writeReplace() {
+        List<String> keys = new ArrayList<>(keyCount);
+        List<Integer> counts = new ArrayList<>(keyCount);
+        List<Object> values = new ArrayList<>();
+        // DFS bằng ngăn xếp tường minh (không đệ quy), theo thứ tự từ điển của key
+        Deque<Iterator<Map.Entry<Character, Node<V>>>> stack = new ArrayDeque<>();
+        StringBuilder path = new StringBuilder();
+        addKey(root, path, keys, counts, values);
+        stack.push(childrenOf(root));
+        while (!stack.isEmpty()) {
+            Iterator<Map.Entry<Character, Node<V>>> children = stack.peek();
+            if (!children.hasNext()) {
+                stack.pop();
+                if (!stack.isEmpty()) {
+                    path.setLength(path.length() - 1); // rời nút con, quay về nút cha
+                }
+                continue;
+            }
+            Map.Entry<Character, Node<V>> child = children.next();
+            path.append(child.getKey().charValue());
+            addKey(child.getValue(), path, keys, counts, values);
+            stack.push(childrenOf(child.getValue()));
+        }
+        return new SerializedForm(keys.toArray(new String[0]),
+                counts.stream().mapToInt(Integer::intValue).toArray(), values.toArray());
+    }
+
+    private static <V> void addKey(Node<V> node, StringBuilder path, List<String> keys, List<Integer> counts,
+                                   List<Object> values) {
+        if (node.values != null && !node.values.isEmpty()) {
+            keys.add(path.toString());
+            counts.add(node.values.size());
+            values.addAll(node.values);
+        }
+    }
+
+    private static <V> Iterator<Map.Entry<Character, Node<V>>> childrenOf(Node<V> node) {
+        return node.children == null ? Collections.emptyIterator() : node.children.entrySet().iterator();
+    }
+
+    /**
+     * Dạng lưu xuống file của Trie: key thứ i có {@code counts[i]} value, nằm liên tiếp trong {@code values}
+     * (giữ đúng thứ tự cũ của các value trong cùng một key).
+     */
+    private static final class SerializedForm implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        private final String[] keys;
+        private final int[] counts;
+        private final Object[] values;
+
+        SerializedForm(String[] keys, int[] counts, Object[] values) {
+            this.keys = keys;
+            this.counts = counts;
+            this.values = values;
+        }
+
+        private Object readResolve() throws ObjectStreamException {
+            if (keys == null || counts == null || values == null || keys.length != counts.length) {
+                throw new InvalidObjectException("Malformed trie data");
+            }
+            Trie<Object> trie = new Trie<>();
+            int next = 0;
+            for (int i = 0; i < keys.length; i++) {
+                if (keys[i] == null || counts[i] <= 0 || counts[i] > values.length - next) {
+                    throw new InvalidObjectException("Malformed trie data");
+                }
+                for (int j = 0; j < counts[i]; j++) {
+                    trie.put(keys[i], values[next++]);
+                }
+            }
+            if (next != values.length) {
+                throw new InvalidObjectException("Malformed trie data");
+            }
+            return trie;
+        }
     }
 }

@@ -129,6 +129,39 @@ class DataStructuresTest {
         }
     }
 
+    @Test
+    void trieWithVeryLongKeyRoundTripsWithoutDeepRecursion() throws Exception {
+        // Serialize mặc định đệ quy theo độ dài key: 50.000 ký tự làm tràn stack mặc định khi đọc lại.
+        String longKey = "x".repeat(50_000);
+        Trie<Integer> trie = new Trie<>();
+        trie.put(longKey, 1);
+        trie.put("lol", 3);
+        trie.put("lol", 2); // thứ tự value trong cùng key phải được giữ
+        trie.put("l", 4);
+
+        Trie<Integer> restored = roundTrip(trie);
+        assertEquals(Set.of(1), restored.get(longKey));
+        assertEquals(List.of(4, 3, 2), restored.valuesWithPrefix("l", 10));
+        assertEquals(List.of(4, 3, 2, 1), restored.valuesWithPrefix("", 10));
+        assertEquals(3, restored.keyCount());
+        assertTrue(restored.remove("lol", 3));
+        assertEquals(List.of(4, 2), restored.valuesWithPrefix("l", 10));
+
+        assertTrue(restored.remove(longKey, 1));
+        assertFalse(restored.remove(longKey, 1));
+        assertEquals(List.of(), restored.valuesWithPrefix("x", 10));
+        assertEquals(2, restored.keyCount());
+    }
+
+    @Test
+    void emptyTrieRoundTrips() throws Exception {
+        Trie<Integer> restored = roundTrip(new Trie<Integer>());
+        assertEquals(0, restored.keyCount());
+        assertEquals(List.of(), restored.valuesWithPrefix("", 10));
+        restored.put("a", 1);
+        assertEquals(Set.of(1), restored.get("a"));
+    }
+
     // ---------------- BKTree ----------------
 
     @Test

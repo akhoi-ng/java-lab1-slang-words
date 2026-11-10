@@ -98,6 +98,26 @@ class DictionaryStoreTest {
     }
 
     @Test
+    void veryLongSlangNameIsSavedInBackgroundAndLoadedBack() throws Exception {
+        // Lỗi C1: tên rất dài ghi được nhưng đọc lại tràn stack, app không mở lại được.
+        SlangDictionary dictionary = small();
+        String longName = "a".repeat(20_000);
+        SlangEntry added = dictionary.add(longName, List.of("too long"));
+        List<IOException> errors = new CopyOnWriteArrayList<>();
+        try (DictionaryStore store = store(dir)) {
+            store.setErrorListener(errors::add);
+            store.saveInBackground(dictionary);
+            store.flush();
+        }
+        assertEquals(List.of(), errors);
+
+        SlangDictionary loaded = DictionaryStore.load(dir.resolve("dictionary.dat"));
+        assertSameContent(dictionary, loaded);
+        assertEquals(java.util.Set.of(added.getId()), loaded.idsByName(longName));
+        assertEquals(List.of(added.getId()), loaded.idsWithNamePrefix("aaa", 10));
+    }
+
+    @Test
     void saveOverwritesExistingFile() throws Exception {
         Path file = dir.resolve("dictionary.dat");
         SlangDictionary d = small();

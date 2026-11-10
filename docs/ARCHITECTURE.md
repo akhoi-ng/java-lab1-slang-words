@@ -326,22 +326,28 @@ Phần quyết định được tách thành hàm thuần `resolveDataDir(...)` 
 ```
 có dictionary.dat? ──có──► load ──OK──► dùng luôn (Source.DAT)
         │                    │
-       không             lỗi (DictionaryFormatException)
+       không             lỗi (mọi IOException)
         ▼                    ▼
    build từ slang.txt gốc (data/slang.txt nếu có, không thì bản nhúng trong jar)
         ▼
    lưu dictionary.dat cho lần sau (Source.TEXT)
 ```
 
-`DictionaryFormatException` kế thừa `IOException`: mọi kiểu hỏng (sai magic, sai version, sai CRC, bị cắt cụt, class không khớp, dữ liệu rác) đều quy về **một** loại lỗi, và `loadOrBuild` chỉ cần bắt một chỗ để build lại.
+`DictionaryFormatException` kế thừa `IOException`: mọi kiểu hỏng (sai magic, sai version, sai CRC, bị cắt cụt, class không khớp, dữ liệu rác, cấu trúc lồng quá sâu gây `StackOverflowError`) đều quy về **một** loại lỗi. Tuy vậy `loadOrBuild` hiện bắt **mọi** `IOException`, không riêng `DictionaryFormatException`: lỗi đọc tạm thời (file đang bị process khác giữ, không có quyền) cũng dẫn tới build lại rồi ghi đè `.dat`, và thay đổi của người dùng mất mà không có thông báo (lỗi C2 trong `AUDIT_REPORT.md`, chưa sửa).
+
+**Cấu trúc sâu khi serialize:** serialize mặc định của Java đi đệ quy theo từng tầng object. `Trie` mỗi ký tự của tên là một tầng `Node` → `TreeMap` → `Node`, nên một tên vài trăm ký tự đủ làm `ObjectInputStream` tràn stack khi đọc lại, và app không mở lại được nữa (lỗi C1). Cách xử lý:
+- `Trie` ghi dưới dạng phẳng qua `writeReplace` → `SerializedForm` (mảng key, số value của mỗi key, mảng value), duyệt bằng vòng lặp; khi đọc thì `readResolve` chèn lại từng key. `collect` (tìm PREFIX) và `remove` cũng dùng vòng lặp thay cho đệ quy. File `.dat` do bản cũ ghi vẫn đọc được vì `Trie` và `Node` giữ nguyên field và `serialVersionUID`.
+- `BKTree` vẫn serialize đệ quy, nhưng độ sâu của nó không phụ thuộc độ dài tên. Để chắc chắn, luồng ghi và luồng đọc (`load()` chạy trên một luồng riêng) đều có stack 16 MB: file nào ghi được thì đọc lại được.
+- `DictionaryService.validate` giới hạn tên slang tối đa 100 ký tự (`MAX_NAME_LENGTH`; slang dài nhất trong file gốc chỉ 15 ký tự).
+- Test: `trieWithVeryLongKeyRoundTripsWithoutDeepRecursion` (key 50.000 ký tự), `veryLongSlangNameIsSavedInBackgroundAndLoadedBack` (tên 20.000 ký tự).
 
 **Ghi an toàn (atomic):** ghi ra `dictionary.dat.tmp`, `force(true)` để chắc chắn dữ liệu đã xuống đĩa, rồi `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)` đè lên file thật. Nếu app bị tắt giữa chừng thì chỉ hỏng file `.tmp`, file `.dat` cũ vẫn nguyên vẹn. Trên Windows, trình diệt virus có thể giữ file trong chốc lát nên việc đổi tên được thử lại tối đa 5 lần.
 
 **Ghi nền (`saveInBackground`):**
-- Đo thực tế: serialize 100k slang mất khoảng 2 giây. Nếu ghi trên EDT thì mỗi lần add/edit/delete giao diện sẽ đứng 2 giây. Vì vậy có **một** luồng nền riêng (`ExecutorService` một luồng) lo việc serialize và ghi; `saveInBackground` trả về ngay.
+- Đo thực tế: serialize và ghi 100k slang mất khoảng 1,3 giây. Nếu ghi trên EDT thì mỗi lần add/edit/delete giao diện sẽ đứng chừng ấy thời gian. Vì vậy có **một** luồng nền riêng (`ExecutorService` một luồng) lo việc serialize và ghi; `saveInBackground` trả về ngay.
 - **Gộp các lần lưu dồn dập:** mỗi yêu cầu nhận một số thứ tự (`AtomicLong`). Khi đến lượt chạy, nếu đã có yêu cầu mới hơn thì bỏ qua và để lần mới nhất ghi. Xóa 10 entry liên tiếp chỉ ghi 1–2 lần chứ không phải 10.
 - **Hoãn ghi 1,5 s (thêm ở bước 10):** trong lúc serialize, luồng ghi giữ khóa của từ điển. Nếu ghi ngay sau mỗi lần sửa thì lần tìm lại ngay sau đó (để hiện entry vừa sửa) phải đứng chờ khoảng 2 s ở bản 100k. Vì vậy app dùng `ScheduledThreadPoolExecutor`: mỗi yêu cầu hẹn ghi sau 1,5 s, yêu cầu mới thì dời giờ (debounce). Lần tìm lại xong trước, việc ghi rơi vào lúc người dùng đang đọc kết quả. Constructor 2 tham số vẫn ghi ngay (test dùng).
-- Lỗi ghi được báo qua `errorListener` (bước 7 sẽ cho hiện thông báo trên UI) thay vì làm sập app.
+- Lỗi ghi được báo qua `errorListener` (hiện thông báo trên UI) thay vì làm sập app. Luồng ghi bắt cả `IOException`, `RuntimeException` lẫn `Error` (ví dụ `StackOverflowError`): nếu không, executor giữ `Error` trong `Future` mà không ai đọc, và mọi lần lưu sau đó thất bại im lặng.
 - Khi thoát, shutdown hook gọi `close()` → `flush()`: **ghi ngay** lần đang hẹn giờ (không chờ hết 1,5 s) rồi chờ ghi xong.
 
 **Bảo mật khi đọc (`ObjectInputFilter`):** deserialize trong Java có thể khởi tạo bất kỳ class nào ghi trong file, đây là lỗ hổng kinh điển. Filter chỉ cho phép class của app, `java.util.*` và `java.lang.*`, đồng thời giới hạn kích thước mảng để file hỏng không làm tràn bộ nhớ.
@@ -351,8 +357,11 @@ có dictionary.dat? ──có──► load ──OK──► dùng luôn (Sourc
 | | 7,6k slang (file gốc) | 100k slang |
 |---|---|---|
 | Build index từ text | 50–100 ms | 1,6–3,3 s |
-| Đọc `.dat` | 45–110 ms | 0,8–1,5 s |
-| Kích thước `.dat` | 2,3 MB | 30 MB |
+| Đọc `.dat` | 40–200 ms | 0,6–0,7 s |
+| Ghi `.dat` | 40–200 ms | 1,3–1,4 s |
+| Kích thước `.dat` | 2,0 MB | 27 MB |
+
+Số đọc/ghi `.dat` đo lại sau khi `Trie` chuyển sang ghi phẳng (11/11/2026, JDK 25, 3 lượt; lượt đầu chậm hơn vì JIT chưa chạy). Định dạng cũ cho file 100k khoảng 34 MB, đọc 1,8–2,2 s.
 
 → Lần chạy thứ hai trở đi chỉ đọc `.dat`, đáp ứng yêu cầu chung 3 của đề (không index lại mỗi lần mở app).
 

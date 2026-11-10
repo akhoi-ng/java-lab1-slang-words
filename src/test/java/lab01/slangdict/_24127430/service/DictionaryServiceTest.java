@@ -330,6 +330,10 @@ class DictionaryServiceTest {
         assertEquals(Optional.of(Problem.NO_MEANING), DictionaryService.validate("ok", List.of(" ", "")));
         assertEquals(Optional.of(Problem.NO_MEANING), DictionaryService.validate("ok", List.of()));
         assertEquals(Optional.of(Problem.MEANING_INVALID), DictionaryService.validate("ok", List.of("a | b")));
+        int max = DictionaryService.MAX_NAME_LENGTH;
+        assertEquals(Optional.of(Problem.NAME_TOO_LONG), DictionaryService.validate("a".repeat(max + 1), List.of("x")));
+        assertEquals(Optional.empty(), DictionaryService.validate("a".repeat(max), List.of("x")));
+        assertEquals(Optional.empty(), DictionaryService.validate("  " + "a".repeat(max) + "  ", List.of("x")));
         // ":|" là tên slang có thật trong slang.txt: '|' được phép trong tên
         assertEquals(Optional.empty(), DictionaryService.validate(":|", List.of("Disgust")));
         assertEquals(Optional.empty(), DictionaryService.validate("ok", Arrays.asList(null, "fine")));

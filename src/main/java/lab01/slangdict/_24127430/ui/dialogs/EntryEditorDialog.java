@@ -364,7 +364,7 @@ public final class EntryEditorDialog {
             }
             showError(problem.get());
             switch (problem.get()) {
-                case NAME_EMPTY, NAME_INVALID -> {
+                case NAME_EMPTY, NAME_INVALID, NAME_TOO_LONG -> {
                     nameField.requestFocusInWindow();
                     nameField.selectAll();
                 }
@@ -391,6 +391,8 @@ public final class EntryEditorDialog {
 
         private void showError(DictionaryService.Problem problem) {
             errorLabel.setText(problem == null ? " "
+                    : problem == DictionaryService.Problem.NAME_TOO_LONG
+                    ? Messages.format("editor.problem.name_too_long", DictionaryService.MAX_NAME_LENGTH)
                     : Messages.get("editor.problem." + problem.name().toLowerCase(java.util.Locale.ROOT)));
         }
 
