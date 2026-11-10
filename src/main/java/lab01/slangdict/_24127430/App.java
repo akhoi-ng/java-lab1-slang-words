@@ -14,10 +14,13 @@ import javax.swing.SwingWorker;
 import lab01.slangdict._24127430.i18n.Messages;
 import lab01.slangdict._24127430.io.DictionaryStore;
 import lab01.slangdict._24127430.io.SettingsStore;
+import lab01.slangdict._24127430.service.SearchService;
+import lab01.slangdict._24127430.ui.Feature;
 import lab01.slangdict._24127430.ui.LoadingWindow;
 import lab01.slangdict._24127430.ui.MainFrame;
 import lab01.slangdict._24127430.ui.SwingLocalizer;
 import lab01.slangdict._24127430.ui.ThemeManager;
+import lab01.slangdict._24127430.ui.panels.SearchPanel;
 
 /**
  * Điểm khởi động ứng dụng Slang Dictionary.
@@ -96,11 +99,20 @@ public final class App {
                         loaded.dictionary().size(), loaded.source(), loaded.elapsedMillis());
                 mainFrame = new MainFrame(settings, loaded, store.dictionaryFile().getParent(), VERSION,
                         () -> exit(store));
+                installScreens(mainFrame, loaded);
                 mainFrame.setVisible(true);
                 pendingSaveErrors.forEach(mainFrame::showSaveError);
                 pendingSaveErrors.clear();
             }
         }.execute();
+    }
+
+    /** Gắn các màn hình thật vào MainFrame thay cho màn hình tạm (mỗi bước 8–12 thêm một phần). */
+    private static void installScreens(MainFrame frame, DictionaryStore.LoadResult loaded) {
+        // Bước 10–11 sẽ đổi loaded::dictionary thành nguồn "từ điển hiện tại", vì Reset thay object từ điển
+        SearchService searchService = new SearchService(loaded::dictionary);
+        SearchPanel searchPanel = new SearchPanel(searchService, frame::showFeature);
+        frame.setScreen(Feature.Card.SEARCH, searchPanel);
     }
 
     private static void reportSaveError(IOException error) {

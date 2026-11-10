@@ -10,10 +10,10 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–7** → tiếp theo là bước 8 |
-| Test | 83/83 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 11 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
-| Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều được commit (`docs/` nằm trong `.git/info/exclude` nên lần đầu phải `git add -f`; sau đó git theo dõi bình thường) |
+| Bước đang ở | **Xong bước 1–7, bước 8 xong code nhưng chưa commit** → commit bước 8 rồi làm bước 9 |
+| Test | 95/95 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 12 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
+| Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
 
@@ -55,7 +55,7 @@
 | 5 | `AppPaths` + `DictionaryStore` (.dat) + load khi khởi động | yêu cầu chung 3, 4 | ✅ 10/11 |
 | 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ✅ 10/11 |
 | 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ✅ 10/11 |
-| 8 | `SearchPanel` | **F1, F2** | ⬜ |
+| 8 | `SearchPanel` | **F1, F2** | 🟡 11/11 |
 | 9 | History (service + store + panel) | **F3** | ⬜ |
 | 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ⬜ |
 | 11 | Reset + Random | **F7, F8** | ⬜ |
@@ -68,17 +68,16 @@
 |---|---|---|
 | 04/11, 05/11, 08/11 | đã có | 3 |
 | 09/11 | bước 1, 2, 3 | 3 ✅ |
-| **10/11** | bước 4 → 13 | ~10 |
-| Tổng | | ~16 commit trên 5 ngày ✓ |
-
-Nếu deadline là 11/11 thì chuyển bớt các bước 10–13 sang ngày 11/11 để commit rải đều hơn.
+| 10/11 | bước 4 → 7 + docs | 6 ✅ |
+| **11/11** | bước 8 → 13 | ~6 |
+| Tổng | | ~18 commit trên 6 ngày ✓ |
 
 ---
 
 ## 3. Việc cần làm NGAY
 
 1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
-2. ~~Dùng prompt của bước 6, 7~~ → xong 10/11. Commit bước 7 rồi dùng prompt của **bước 8** (mục 5 bên dưới).
+2. ~~Dùng prompt của bước 6, 7, 8~~ → xong. Commit bước 8 rồi dùng prompt của **bước 9** (mục 5 bên dưới).
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 
 ---
@@ -217,6 +216,22 @@ Các method:
 - EXACT không ra kết quả thì gợi ý "Có phải bạn muốn tìm: …" bằng FUZZY
 - Mỗi lần tìm thật (Enter/nút) thì ghi vào history (bước 9 sẽ nối dây)
 - Có sẵn nút Add/Edit/Delete trên toolbar (bước 10 sẽ nối dây)
+
+**Kết quả khi làm (11/11):**
+- Bổ sung so với đặc tả:
+  - **Tìm trên luồng nền** (một luồng "search" riêng), nên query nặng ở bản 100k (~0,2 s) không làm đứng giao diện. Kết quả cũ về muộn thì bị bỏ nhờ số thứ tự `AtomicLong`. Lâu hơn 120 ms thì hiện "Đang tìm…".
+  - Vì tìm chạy trên luồng khác EDT, `SearchService` đọc index trong `synchronized (dictionary)`, cùng khóa với add/replace/remove. **Bước 10 không cần làm gì thêm**: cứ sửa từ điển trên EDT như bình thường.
+  - Bảng hiện tối đa **1.000 dòng**; dòng trạng thái vẫn ghi đủ tổng số ("Hiện 1.000 / 88.464 kết quả đầu tiên · 230 ms").
+  - Đổi tab Slang ↔ Định nghĩa ngay trên màn hình thì Sidebar và tiêu đề cửa sổ đổi theo F1 ↔ F2.
+  - Mỗi target nhớ mode riêng: slang mặc định **Tiền tố**, definition mặc định **Chính xác**. Có dòng giải thích ngắn cho mode đang chọn.
+  - Gợi ý "Có phải bạn muốn tìm" dùng cho cả 2 target và mọi mode trừ Gần đúng: slang gợi ý tối đa 5 tên, definition gợi ý 1 câu đã sửa lỗi gõ (`laugh out lound` → `laugh out loud`). Bấm gợi ý là tìm luôn. Logic nằm ở `SearchService.suggestions`.
+  - Kết quả tốt nhất được chọn sẵn; khung chi tiết tô màu từ khóa khớp (khi tìm theo definition).
+  - Phím: Enter tìm, ↓ xuống bảng, Esc xóa ô tìm, Delete trong bảng = chức năng 6.
+- **Điểm nối cho các bước sau** (đã có sẵn trong `SearchPanel`):
+  - Bước 9: `setSearchListener(historyService::add)` để ghi lịch sử; `search(target, mode, query)` để bấm đúp một dòng lịch sử là chuyển sang màn hình Search và tìm lại.
+  - Bước 10: `selectedEntry()` cho Sửa/Xóa; `refresh()` để tìm lại sau khi dữ liệu đổi. Nút Thêm/Sửa/Xóa đã gọi `mainFrame.showFeature(ADD/EDIT/DELETE)`, nên chỉ cần `mainFrame.setAction(...)`.
+  - Bước 10–11: `App.installScreens` đang tạo `new SearchService(loaded::dictionary)`. Khi có `DictionaryService` thì đổi thành nguồn "từ điển hiện tại", vì Reset thay object từ điển.
+- Đã chạy jar thật: tìm-khi-gõ, Ctrl+2 sang Định nghĩa, gõ sai thì có gợi ý, tô từ khóa, đổi theme sáng/tối.
 
 ### Bước 9: History (F3)
 

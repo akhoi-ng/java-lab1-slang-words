@@ -86,7 +86,8 @@ Package gốc: `lab01.slangdict._24127430`. Phần tên package không được 
 | `service` | **Nghiệp vụ** của 10 chức năng | `SearchService`, `SearchOutcome` | ✅ |
 | | | `DictionaryService`, `HistoryService`, `RandomService`, `QuizService` | ⬜ |
 | `ui` | **Giao diện Swing** | Khung: `MainFrame`, `Sidebar`, `Feature`, `FeatureScreen`, `ThemeManager`, `LoadingWindow`, `SwingLocalizer`, `NumberBadgeIcon`, `AppIcon`, `dialogs/AboutDialog`, `panels/PlaceholderPanel` | ✅ |
-| | | `panels/*` (Search, History, Random, Quiz), `dialogs/*` (EntryEditor, Conflict, Reset) | ⬜ |
+| | | `panels/SearchPanel` (F1, F2) | ✅ |
+| | | `panels/*` (History, Random, Quiz), `dialogs/*` (EntryEditor, Conflict, Reset) | ⬜ |
 | `i18n` | Chữ song ngữ Anh/Việt, đổi ngay khi đang chạy | `Messages` + `messages_vi/en.properties` | ✅ |
 | `tools` | Sinh 100k slang để benchmark | `BigDataGenerator` | ✅ |
 
@@ -501,6 +502,54 @@ EDT:        done(): đóng LoadingWindow → tạo MainFrame → hiện
 
 **About (Trợ giúp → Giới thiệu):** tên app, phiên bản, môn học, **Nguyễn Anh Khôi – MSSV 24127430**, thư viện (FlatLaf – Apache License 2.0, JUnit 5), phiên bản Java và thư mục dữ liệu.
 
+
+### 4.12 Màn hình tìm kiếm `SearchPanel` (bước 8, F1 + F2)
+
+**Bố cục:**
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ [ Slang ] [ Định nghĩa ]                       ← target: F1 / F2           │
+│ [🔍 laugh out lound ..............  ✕]  Kiểu khớp: [Chính xác ▾]  [Tìm]   │
+│ Nghĩa có đủ mọi từ khóa (đúng nguyên từ)…      ← giải thích mode đang chọn │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Không tìm thấy kết quả nào · 0,26 ms   Có phải bạn muốn tìm: laugh out loud │
+│                                                    [4 Thêm] [5 Sửa] [6 Xóa] │
+│ ┌ Slang ─┬ Nghĩa ───────────────────┐  ┌ LOLL ────────────────────────────┐ │
+│ │ BLOL   │ Big Laugh Out Loud       │  │ 1 nghĩa                          │ │
+│ │ LOLL   │ Laugh Out Loud Literally │  │ 1. [Laugh] [Out] [Loud] Literally│ │
+│ └────────┴──────────────────────────┘  └──────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Một màn hình cho cả F1 và F2.** `SearchPanel` cài `FeatureScreen`: mở bằng F1 (Sidebar, menu, Ctrl+1) thì chọn tab Slang, F2 thì tab Định nghĩa. Ngược lại, người dùng bấm tab ngay trên màn hình thì panel gọi callback `navigator` (= `mainFrame::showFeature`), nên Sidebar và tiêu đề cửa sổ đổi theo F1 ↔ F2. Hai chiều không gọi nhau mãi vì `onShown` thấy target đã khớp thì không làm gì.
+- **Mỗi target nhớ mode riêng** (`EnumMap<SearchTarget, SearchMode>`): slang mặc định **Tiền tố** (gõ tới đâu ra tới đó), definition mặc định **Chính xác** (đúng nghĩa "definition có chứa keyword" của đề).
+- **Tìm khi đang gõ** chỉ ở Slang + Tiền tố: mỗi lần gõ thì khởi động lại một `javax.swing.Timer` 150 ms, ngừng gõ đủ 150 ms mới tìm (*debounce*), nên gõ nhanh "lmao" chỉ tìm 1 lần chứ không 4 lần. Các mode khác tìm khi nhấn Enter hoặc nút Tìm.
+- **Ghi lịch sử:** chỉ lần tìm "thật" (Enter, nút Tìm, bấm gợi ý) mới gọi `searchListener` với một `HistoryItem`; tìm-khi-gõ thì không, nếu không lịch sử sẽ đầy "l", "lo", "lol". Bước 9 chỉ cần `searchPanel.setSearchListener(historyService::add)`.
+- **Bảng kết quả:** `JTable` + `AbstractTableModel` tự viết (2 cột, dữ liệu là `List<SearchResult>` đã xếp hạng). Không cho bấm tiêu đề để sắp xếp lại, vì thứ tự chính là thứ hạng của `SearchService`. Bảng hiện tối đa **1.000 dòng**; dòng trạng thái vẫn ghi đủ tổng số, ví dụ "Hiện 1.000 / 88.464 kết quả đầu tiên · 230 ms". Ô bị cắt "…" thì rê chuột vào thấy đủ nội dung.
+- **Khung chi tiết:** kết quả tốt nhất được chọn sẵn, nên tìm "lol" là thấy ngay nghĩa của LOL. Khi tìm theo definition, các từ khóa khớp được tô màu bằng `Highlighter` của `JTextArea`. Vị trí cần tô do `matchRanges` tính bằng regex theo đúng kiểu khớp: EXACT `(?<![\p{L}\p{N}])the(?![\p{L}\p{N}])` (nguyên từ, *lookbehind/lookahead*), PREFIX chỉ cần đầu từ, SUBSTRING ở bất kỳ đâu; từ khóa đi qua `Pattern.quote` nên ký tự như `+` không làm hỏng regex.
+- **"Có phải bạn muốn tìm…"** khi không có kết quả (trừ mode Gần đúng), dùng `SearchService.suggestions` (BK-tree):
+  - Slang: tối đa 5 tên gần nhất, ví dụ `lool` → LOL. Tên trong index đã chuyển chữ thường, nên lấy cách viết gốc của entry.
+  - Definition: sửa từng từ không có trong từ vựng thành từ gần nhất (hòa thì lấy từ xuất hiện trong nhiều slang hơn): `laugh out lound` → `laugh out loud`.
+  - Bấm vào gợi ý là tìm luôn.
+- **Bàn phím:** Enter tìm, ↓ từ ô tìm xuống bảng, Esc xóa ô tìm, Delete trong bảng = chức năng 6. Nút Thêm/Sửa/Xóa gọi chức năng 4/5/6 của MainFrame (bước 10 gắn dialog thật qua `setAction`); Sửa/Xóa chỉ bấm được khi đang chọn một dòng (`selectedEntry()`).
+
+**Tìm trên luồng nền và bỏ kết quả cũ:**
+
+```
+EDT:   gõ / Enter → ticket = generation.incrementAndGet() → executor.execute(...)   (EDT rảnh ngay)
+luồng "search":  ticket còn mới nhất? → service.search(...) (+ suggestions nếu rỗng)
+                 → SwingUtilities.invokeLater(...)
+EDT:   ticket vẫn là mới nhất? → đổ vào bảng; không thì bỏ (người dùng đã gõ tiếp)
+```
+
+- Query nặng nhất ở bản 100k (definition chứa `e`, ~0,2 s) không làm đứng giao diện; nếu lâu hơn 120 ms thì dòng trạng thái hiện "Đang tìm…".
+- `generation` là `AtomicLong`, vì được đọc ở cả hai luồng. Nhờ nó, kết quả của lần tìm cũ về muộn không bao giờ đè lên kết quả mới.
+- **Khóa:** add/edit/delete (bước 10) chạy trên EDT, còn tìm kiếm chạy trên luồng "search". `SearchService` vì vậy đọc index bên trong `synchronized (dictionary)`, cùng khóa với `add/replace/remove` của `SlangDictionary`. Nếu không có khóa, luồng tìm có thể đọc `HashMap` đúng lúc EDT đang sửa dở (`ConcurrentModificationException` hoặc kết quả sai).
+- Luồng "search" là *daemon thread*, nên không giữ JVM lại khi thoát app.
+
+**Test không cần màn hình:** `SearchPanelTest` truyền executor `Runnable::run` (tìm ngay trên luồng gọi) qua constructor package-private, tạo panel trên EDT bằng `invokeAndWait`, rồi chờ EDT xử lý xong `invokeLater` trước khi kiểm tra bảng.
+
 ---
 
 ## 5. Unit test
@@ -515,14 +564,15 @@ EDT:        done(): đóng LoadingWindow → tạo MainFrame → hiện
 | `core/SlangDictionaryTest` | Build từ file gốc đủ 7.638 entry, tra tên không phân biệt hoa thường, tên trùng là các entry riêng, **hàng nghìn thao tác ngẫu nhiên xong mọi index vẫn giống hệt từ điển build lại từ đầu**, serialize rồi đọc lại vẫn đúng |
 | `io/AppPathsTest` | 3 trường hợp chọn thư mục data (system property / chạy từ jar / chạy trong IDE), tự tạo thư mục |
 | `io/DictionaryStoreTest` | Lưu rồi đọc lại đúng; file sai magic/version/bị cắt cụt/chứa class lạ đều bị từ chối; **đổi bất kỳ byte nào cũng bị CRC phát hiện**; lần đầu build từ text, lần sau đọc `.dat`; `.dat` hỏng thì build lại; lưu dồn dập ra đúng trạng thái cuối; vừa sửa vừa lưu không ra file "nửa vời"; lỗi ghi nền được báo qua listener |
-| `service/SearchServiceTest` | Từng mode × target trên từ điển nhỏ (kể cả ký hiệu `:\|`, tên trùng, AND, thưởng nguyên cụm, k = 0 cho từ ngắn); `limit` cắt đúng mà `totalMatches` vẫn đủ; luôn dùng từ điển hiện tại sau khi đổi (giống Reset); **so với cách duyệt tuần tự trên file gốc** cho cả 8 tổ hợp |
+| `service/SearchServiceTest` | Từng mode × target trên từ điển nhỏ (kể cả ký hiệu `:\|`, tên trùng, AND, thưởng nguyên cụm, k = 0 cho từ ngắn); `limit` cắt đúng mà `totalMatches` vẫn đủ; luôn dùng từ điển hiện tại sau khi đổi (giống Reset); **so với cách duyệt tuần tự trên file gốc** cho cả 8 tổ hợp; gợi ý "Có phải bạn muốn tìm" (giữ cách viết gốc, không gợi ý lại chính query, sắp theo khoảng cách, chỉ sửa từ không có trong từ vựng) |
 | `service/SearchBenchmarkTest` | Build 100k, mỗi tổ hợp (cả query "nặng" như `e`, `a`) phải < 1 s; in bảng thời gian ra console |
 | `tools/BigDataGeneratorTest` | Giữ nguyên entry gốc, id không trùng, tên tổng hợp không trùng và đúng dạng, cùng seed thì cùng dữ liệu, file ghi ra đọc lại được, `main` ghi đúng số lượng |
 | `i18n/MessagesTest` | Hai file `.properties` có **đúng cùng bộ key**, không có giá trị rỗng, chuỗi có tham số không chứa dấu `'` đơn lẻ; tiếng Việt đọc đúng UTF-8; đổi ngôn ngữ thì chữ đổi và listener được gọi đúng một lần (chọn lại ngôn ngữ đang dùng thì không gọi); `vi-VN` → `vi`, ngôn ngữ lạ → mặc định; số định dạng theo ngôn ngữ (7.638 / 7,638) |
 | `io/SettingsStoreTest` | Chưa có file thì dùng mặc định; lưu rồi đọc lại đúng (tự tạo thư mục, không sót file `.tmp`); giá trị lạ/rỗng → mặc định; file hỏng không làm app lỗi và vẫn ghi đè được |
+| `ui/panels/SearchPanelTest` | Enter → bảng đúng thứ hạng, dòng đầu được chọn, ghi đúng 1 dòng lịch sử; xóa ô tìm thì xóa kết quả; mở bằng F2 thì sang Định nghĩa mà không gọi ngược MainFrame, bấm tab thì có gọi; mỗi target nhớ mode riêng; EXACT không ra kết quả thì có gợi ý, bấm gợi ý thì tìm; tìm từ lịch sử; đổi ngôn ngữ thì dòng trạng thái và tiêu đề cột đổi theo; vị trí tô từ khóa đúng theo từng mode. Không mở cửa sổ |
 | `ui/FeatureTest` | Đúng 10 chức năng đánh số 1–10; mọi card đều có chức năng, F4–F7 là hành động; phím tắt không trùng (Ctrl+1 … Ctrl+0); mọi chức năng và nhóm có chữ ở cả hai ngôn ngữ. Không tạo cửa sổ nên chạy được trên máy không có màn hình |
 
-Tổng cộng **83 test** (tới hết bước 7). Phần giao diện được kiểm tra bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading.
+Tổng cộng **95 test** (tới hết bước 8). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối.
 
 Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 
@@ -543,7 +593,7 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | Java IO, NIO | `BufferedReader`, `Files.newBufferedReader`, `ObjectOutputStream` (serialize), `FileChannel.force`, `Files.move(ATOMIC_MOVE)` |
 | Exception (checked) | `SlangFormatException`, `DictionaryFormatException extends IOException`, `try-with-resources` |
 | Serialization | `Serializable`, `serialVersionUID`, `readResolve`, `writeObject` tùy biến, `ObjectInputFilter` |
-| Đa luồng | `synchronized` (`SlangDictionary`), `ExecutorService` một luồng, `AtomicLong`, `volatile`, shutdown hook (`DictionaryStore`, `App`) |
+| Đa luồng | `synchronized` (`SlangDictionary`, khối `synchronized (dictionary)` trong `SearchService`), `ExecutorService` một luồng (`DictionaryStore`, `SearchPanel`), daemon thread, `AtomicLong`, `volatile`, shutdown hook (`DictionaryStore`, `App`) |
 | `AutoCloseable` | `DictionaryStore.close()` |
 | `Supplier<T>` (functional interface có sẵn), method reference | `SearchService(Supplier<SlangDictionary>)`, `Math::max`, `Map::size` |
 | `switch` dạng mũi tên (Java 14+) | `SearchService.searchNames` / `matchWord` |
@@ -558,6 +608,9 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | Pattern matching `instanceof` (Java 16+) | `MainFrame.showFeature` (`screen instanceof FeatureScreen fs`) |
 | Lớp nội, override | `Sidebar.NavToggleButton` (`paintComponent`), `updateUI()` để tính lại màu khi đổi theme |
 | Java2D | `NumberBadgeIcon`, `AppIcon` (`Graphics2D`, antialiasing) |
+| `JTable` + `AbstractTableModel`, `JSplitPane` | `SearchPanel` (bảng kết quả, khung chi tiết) |
+| `DocumentListener` + `Timer` (debounce) | `SearchPanel` tìm khi đang gõ |
+| Regex (`Pattern`, lookbehind/lookahead, `Pattern.quote`), `Highlighter` | `SearchPanel.matchRanges` (tô từ khóa trong nghĩa) |
 | i18n | `ResourceBundle`, `messages_en/vi.properties`, `MessageFormat`, `Locale` |
 | `Properties` | `SettingsStore` (`data/settings.properties`) |
 

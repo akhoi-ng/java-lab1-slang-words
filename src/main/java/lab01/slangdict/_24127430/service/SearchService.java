@@ -38,6 +38,10 @@ import lab01.slangdict._24127430.model.SlangEntry;
  * <p>
  * Service không giữ cứng một object từ điển mà lấy qua {@link Supplier} mỗi lần tìm,
  * vì Reset (F7) thay toàn bộ từ điển bằng một object mới.
+ * <p>
+ * <b>Luồng:</b> gọi được từ luồng nền (màn hình Search tìm trên luồng riêng để giao diện không bị đứng).
+ * Mỗi lần tìm giữ khóa {@code synchronized} của từ điển, cùng khóa với add/replace/remove, nên không bao giờ
+ * đọc phải index đang sửa dở.
  */
 public class SearchService {
 
@@ -84,18 +88,105 @@ public class SearchService {
         long start = System.nanoTime();
         SlangDictionary dictionary = Objects.requireNonNull(dictionarySource.get(), "dictionary");
 
-        Map<Integer, Integer> scoreById = target == SearchTarget.SLANG
-                ? searchNames(dictionary, mode, query == null ? "" : query)
-                : searchDefinitions(dictionary, mode, query == null ? "" : query);
+        List<SearchResult> results;
+        // Màn hình Search gọi từ luồng nền, còn add/edit/delete chạy trên EDT: giữ khóa của từ điển
+        // (cùng khóa với add/replace/remove) để không đọc index đang sửa dở
+        synchronized (dictionary) {
+            Map<Integer, Integer> scoreById = target == SearchTarget.SLANG
+                    ? searchNames(dictionary, mode, query == null ? "" : query)
+                    : searchDefinitions(dictionary, mode, query == null ? "" : query);
 
-        List<SearchResult> results = new ArrayList<>(scoreById.size());
-        for (Map.Entry<Integer, Integer> match : scoreById.entrySet()) {
-            results.add(new SearchResult(dictionary.get(match.getKey()), match.getValue()));
+            results = new ArrayList<>(scoreById.size());
+            for (Map.Entry<Integer, Integer> match : scoreById.entrySet()) {
+                results.add(new SearchResult(dictionary.get(match.getKey()), match.getValue()));
+            }
         }
         Collections.sort(results); // điểm cao trước, cùng điểm thì theo tên, rồi theo id
         int total = results.size();
         List<SearchResult> page = total > limit ? results.subList(0, limit) : results;
         return new SearchOutcome(page, total, System.nanoTime() - start);
+    }
+
+    // ===================== GỢI Ý "Có phải bạn muốn tìm" =====================
+
+    /**
+     * Gợi ý khi tìm không ra kết quả, dựa trên BK-tree (FUZZY).
+     * <ul>
+     *   <li>SLANG: tối đa {@code max} tên gần giống query nhất (khoảng cách nhỏ trước), viết đúng hoa thường
+     *       như trong từ điển, ví dụ "lool" → "LOL", "lolz".</li>
+     *   <li>DEFINITION: tối đa <b>một</b> câu đã sửa lỗi gõ: từ nào không có trong từ vựng thì thay bằng từ
+     *       gần nhất (khoảng cách nhỏ nhất, hòa thì chọn từ xuất hiện trong nhiều slang hơn), ví dụ
+     *       "laugh out lound" → "laugh out loud". Không sửa được từ nào thì không gợi ý.</li>
+     * </ul>
+     */
+    public List<String> suggestions(SearchTarget target, String query, int max) {
+        Objects.requireNonNull(target, "target");
+        if (max < 1 || query == null) {
+            return List.of();
+        }
+        SlangDictionary dictionary = Objects.requireNonNull(dictionarySource.get(), "dictionary");
+        synchronized (dictionary) {
+            return target == SearchTarget.SLANG
+                    ? suggestNames(dictionary, query, max)
+                    : suggestDefinition(dictionary, query);
+        }
+    }
+
+    private static List<String> suggestNames(SlangDictionary dictionary, String query, int max) {
+        String q = Tokenizer.normalizeName(query);
+        if (q.isEmpty()) {
+            return List.of();
+        }
+        List<BKTree.Match<String>> matches = new ArrayList<>(dictionary.fuzzyNames(q, nameFuzzyDistance(q)));
+        matches.removeIf(match -> match.distance() == 0); // trùng đúng thì đã có kết quả, không cần gợi ý
+        matches.sort(Comparator.<BKTree.Match<String>>comparingInt(BKTree.Match::distance)
+                .thenComparing(BKTree.Match::item));
+        List<String> names = new ArrayList<>();
+        for (BKTree.Match<String> match : matches) {
+            if (names.size() == max) {
+                break;
+            }
+            // Tên trong index đã chuẩn hóa (chữ thường) → lấy cách viết gốc của entry có id nhỏ nhất
+            dictionary.idsByName(match.item()).stream().min(Integer::compare)
+                    .ifPresent(id -> names.add(dictionary.get(id).getSlang()));
+        }
+        return names;
+    }
+
+    private static List<String> suggestDefinition(SlangDictionary dictionary, String query) {
+        List<String> tokens = Tokenizer.tokens(query);
+        if (tokens.isEmpty()) {
+            return List.of();
+        }
+        Set<String> vocabulary = dictionary.vocabulary();
+        List<String> corrected = new ArrayList<>(tokens.size());
+        boolean changed = false;
+        for (String token : tokens) {
+            if (vocabulary.contains(token)) {
+                corrected.add(token);
+                continue;
+            }
+            String best = null;
+            int bestDistance = Integer.MAX_VALUE;
+            int bestCount = -1;
+            for (BKTree.Match<String> match : dictionary.fuzzyWords(token, wordFuzzyDistance(token))) {
+                int count = dictionary.idsWithWord(match.item()).size();
+                boolean better = match.distance() < bestDistance
+                        || (match.distance() == bestDistance && (count > bestCount
+                                || (count == bestCount && match.item().compareTo(best) < 0)));
+                if (better) {
+                    best = match.item();
+                    bestDistance = match.distance();
+                    bestCount = count;
+                }
+            }
+            if (best == null) {
+                return List.of(); // có từ không sửa được → câu gợi ý cũng không ra kết quả
+            }
+            corrected.add(best);
+            changed = true;
+        }
+        return changed ? List.of(String.join(" ", corrected)) : List.of();
     }
 
     // ===================== SLANG =====================

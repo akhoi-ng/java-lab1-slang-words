@@ -220,6 +220,44 @@ class SearchServiceTest {
         assertEquals(Set.of(1, 2, 8), idSet(search.search(DEFINITION, SearchMode.FUZZY, "of", ALL)));
     }
 
+    // ---------------- gợi ý "Có phải bạn muốn tìm" ----------------
+
+    @Test
+    void slangSuggestionsKeepOriginalSpellingAndSkipTheQueryItself() {
+        SearchService search = service(small());
+        // "lool" (≤ 4 ký tự → sai 1): chỉ "lol" đủ gần; hai entry "LOL"/"lol" → lấy cách viết của id nhỏ nhất
+        assertEquals(List.of("LOL"), search.suggestions(SLANG, "lool", 5));
+        // query đã có trong từ điển thì không gợi ý lại chính nó
+        assertEquals(List.of("LOLZ"), search.suggestions(SLANG, " LOL ", 5));
+        assertEquals(List.of(), search.suggestions(SLANG, "qwertyuiop", 5));
+        assertEquals(List.of(), search.suggestions(SLANG, "   ", 5));
+    }
+
+    @Test
+    void slangSuggestionsAreSortedByDistanceAndLimited() {
+        SlangDictionary dictionary = SlangDictionary.build(List.of(
+                new SlangEntry(0, "abcxyz", List.of("x")),   // cách "abcdez" 2
+                new SlangEntry(1, "abcdey", List.of("y")),   // cách 1
+                new SlangEntry(2, "abcdex", List.of("z")))); // cách 1
+        SearchService search = service(dictionary);
+        // khoảng cách nhỏ trước, cùng khoảng cách thì theo thứ tự chữ cái
+        assertEquals(List.of("abcdex", "abcdey", "abcxyz"), search.suggestions(SLANG, "abcdez", 5));
+        assertEquals(List.of("abcdex"), search.suggestions(SLANG, "abcdez", 1));
+    }
+
+    @Test
+    void definitionSuggestionFixesOnlyUnknownWords() {
+        SearchService search = service(small());
+        assertEquals(List.of("laughing out loud"), search.suggestions(DEFINITION, "Laughing out LOUND!", 5));
+        // mọi từ đều có trong từ vựng → không có gì để sửa
+        assertEquals(List.of(), search.suggestions(DEFINITION, "laughing back", 5));
+        // có từ không sửa được → không gợi ý
+        assertEquals(List.of(), search.suggestions(DEFINITION, "laughing zzzzzzzz", 5));
+        assertEquals(List.of(), search.suggestions(DEFINITION, "?!", 5));
+        // câu gợi ý phải thật sự ra kết quả
+        assertFalse(search.search(DEFINITION, SearchMode.EXACT, "laughing out loud", ALL).isEmpty());
+    }
+
     // ---------------- đối chiếu với cách duyệt tuần tự trên file gốc ----------------
 
     private static SlangDictionary original;

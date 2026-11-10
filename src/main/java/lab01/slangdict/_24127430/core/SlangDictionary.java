@@ -48,6 +48,8 @@ import lab01.slangdict._24127430.model.SlangEntry;
  * serialize từ điển song song. Để bản ghi luôn nhất quán, {@link #writeObject} và ba method sửa dữ liệu
  * cùng {@code synchronized} trên chính object này (giống cách {@code java.util.Vector} làm):
  * đang serialize thì việc sửa phải chờ, và ngược lại. Đọc song song với serialize thì an toàn vì cả hai chỉ đọc.
+ * Ai đọc từ một luồng khác EDT (ví dụ {@code SearchService} chạy trên luồng tìm kiếm của màn hình Search) thì
+ * phải đọc bên trong {@code synchronized (dictionary)} để không gặp lúc EDT đang sửa dở.
  */
 public class SlangDictionary implements Serializable {
 
