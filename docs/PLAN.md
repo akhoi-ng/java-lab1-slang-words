@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–5** → tiếp theo là bước 6 |
-| Test | 48/48 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 9 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → đã đủ 5 ngày, còn thiếu 1 commit nữa để đủ 10 |
+| Bước đang ở | **Xong bước 1–6** → tiếp theo là bước 7 |
+| Test | 67/67 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 10 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
 | Thư mục `docs/` | `PLAN.md` được commit; `ARCHITECTURE.md` chỉ dùng ở máy local để học, **không commit** (`docs/` nằm trong `.git/info/exclude`) |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -53,7 +53,7 @@
 | 3 | Cấu trúc dữ liệu generic (Trie, BKTree, InvertedIndex, Levenshtein) | nền F1, F2 | ✅ 09/11 |
 | 4 | `SlangDictionary` + `Tokenizer` | nền F1–F10 | ✅ 10/11 |
 | 5 | `AppPaths` + `DictionaryStore` (.dat) + load khi khởi động | yêu cầu chung 3, 4 | ✅ 10/11 |
-| 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ⬜ |
+| 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ✅ 10/11 |
 | 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ⬜ |
 | 8 | `SearchPanel` | **F1, F2** | ⬜ |
 | 9 | History (service + store + panel) | **F3** | ⬜ |
@@ -77,8 +77,9 @@ Nếu deadline là 11/11 thì chuyển bớt các bước 10–13 sang ngày 11/
 
 ## 3. Việc cần làm NGAY
 
-1. Khi chuyển sang máy có ARCHITECTURE.md: nhờ agent đối chiếu file đó với code bước 4–5 (`core/SlangDictionary`, `core/Tokenizer`, `io/AppPaths`, `io/DictionaryStore`), nhất là phần ghi nền và header CRC32 đã khác so với đặc tả ban đầu.
-2. Dùng prompt của **bước 6** (mục 5 bên dưới).
+1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
+2. ~~Dùng prompt của bước 6~~ → xong 10/11. Tiếp theo dùng prompt của **bước 7** (mục 5 bên dưới).
+3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 
 ---
 
@@ -150,6 +151,28 @@ Các method:
 - Query rỗng thì trả kết quả rỗng; sắp xếp bằng `Collections.sort` (Comparable của `SearchResult`)
 - `BigDataGenerator main(count=100000, out=data/slang-100k.txt)`: lấy dữ liệu gốc, thêm slang tổng hợp (tên ngẫu nhiên, nghĩa ghép từ từ vựng thật), ghi bằng `SlangFileParser.write`
 - **Test benchmark:** build từ điển 100k trong bộ nhớ, mỗi tổ hợp target × mode phải chạy **< 1000 ms** (thực tế nên chỉ vài ms); test đúng sai cho từng mode trên dữ liệu nhỏ
+
+**Bổ sung đặc tả (chốt 10/11, trước khi code; đổi được nếu thấy không hợp lý):**
+- `SearchOutcome` là record riêng trong package `service`.
+- **Phụ thuộc:** `SearchService(Supplier<SlangDictionary>)`, không giữ cứng một object từ điển, vì Reset (bước 11) thay bằng object từ điển mới.
+- **`limit` và `totalMatches`:** sắp xếp xong mới cắt còn `limit` kết quả. `totalMatches` đếm số **entry** khớp, không phải số tên. Riêng PREFIX phải lấy hết kết quả từ Trie (`Integer.MAX_VALUE`) rồi mới cắt, nếu không `totalMatches` sẽ sai.
+- **Điểm khi tìm SLANG:** tên trùng đúng query: 100 (ở mọi mode); PREFIX còn lại: 50; SUBSTRING: tên bắt đầu bằng query 50, chứa ở giữa 20; FUZZY: 100 − 10 × khoảng cách.
+- **Điểm khi tìm DEFINITION:**
+  - +100 nếu một nghĩa chứa nguyên cụm query; so trên **dãy token**, nên dấu câu và hoa thường không ảnh hưởng.
+  - Với mỗi token của query: +10 nếu entry có đúng từ đó; khớp PREFIX/SUBSTRING mà không trùng đúng thì +5; khớp FUZZY thì +10 − 3 × khoảng cách nhỏ nhất.
+- **k cho FUZZY definition (theo từng token):** độ dài ≤ 2 → k = 0, ≤ 4 → k = 1, còn lại k = 2. Nếu không, token như "a" với k = 1 sẽ khớp mọi từ 1–2 chữ.
+- **Query đặc biệt:** query rỗng, hoặc DEFINITION mà không có token nào (chỉ gồm dấu câu) → kết quả rỗng; token trùng nhau trong query chỉ tính một lần.
+- **`BigDataGenerator`:**
+  - `count` là **tổng** số entry trong file, đã gồm 7.638 entry gốc.
+  - Có hàm `static List<SlangEntry> generate(List<SlangEntry> base, int total, long seed)` để test dùng trong bộ nhớ, không phải ghi file; seed cố định để chạy lại ra đúng kết quả cũ.
+- **Benchmark test:** đo cả **lần gọi đầu tiên** (chưa warm-up) của mỗi tổ hợp; query lấy từ dữ liệu thật, ví dụ slang `lol` / `lo` / `o` / `lool`, definition `laugh out loud` / `lau` / `aug` / `lauhg`.
+- **Demo 100k trên app** (để quay video): copy `data/slang-100k.txt` thành `data/slang.txt` rồi xóa `data/dictionary.dat`, app sẽ build lại với 100k. Lúc này Reset cũng về bản 100k. Demo xong thì xóa 2 file đó để quay về dữ liệu gốc.
+
+**Kết quả khi làm (10/11):**
+- Thay đổi so với đặc tả: thưởng "nguyên cụm" chỉ áp dụng khi query có từ 2 từ trở lên (với 1 từ thì nó trùng với điểm "khớp đúng nguyên từ"). `loadBundledOriginal()` của generator là public để test benchmark dùng chung.
+- Chạy generator: `java -cp target\slang-dictionary.jar lab01.slangdict._24127430.tools.BigDataGenerator [số lượng] [file ra]` → 100.000 entry (7.638 gốc + 92.362 tổng hợp), file khoảng 4 MB, sinh trong khoảng 0,3 s. Chạy từ jar thì file nằm ở `target\data\`, tức cạnh jar.
+- Benchmark 100k, đo lần gọi đầu tiên, 3 lần chạy: build index 1,6–2,1 s. Mọi query đều < 20 ms, trừ các query khớp rất nhiều entry: SLANG SUBSTRING `"o"` (18.210 kết quả) 50–70 ms, DEFINITION PREFIX `"a"` (32.854) 40–48 ms, DEFINITION SUBSTRING `"e"` (88.464) 140–220 ms. Tất cả đều dưới xa mức 1 s.
+- Bẫy đã gặp: chạy cả bộ test thì có lần query đầu tiên đo ra ~960 ms, do JVM dọn rác (GC) còn dồn lại từ lúc build 100k entry. Test gọi `System.gc()` sau khi build rồi mới đo.
 
 ### Bước 7: Khung UI
 
