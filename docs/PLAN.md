@@ -10,10 +10,10 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–6** → tiếp theo là bước 7 |
-| Test | 67/67 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 10 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
-| Thư mục `docs/` | `PLAN.md` được commit; `ARCHITECTURE.md` chỉ dùng ở máy local để học, **không commit** (`docs/` nằm trong `.git/info/exclude`) |
+| Bước đang ở | **Xong bước 1–7** → tiếp theo là bước 8 |
+| Test | 83/83 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 11 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
+| Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều được commit (`docs/` nằm trong `.git/info/exclude` nên lần đầu phải `git add -f`; sau đó git theo dõi bình thường) |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
 
@@ -54,7 +54,7 @@
 | 4 | `SlangDictionary` + `Tokenizer` | nền F1–F10 | ✅ 10/11 |
 | 5 | `AppPaths` + `DictionaryStore` (.dat) + load khi khởi động | yêu cầu chung 3, 4 | ✅ 10/11 |
 | 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ✅ 10/11 |
-| 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ⬜ |
+| 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ✅ 10/11 |
 | 8 | `SearchPanel` | **F1, F2** | ⬜ |
 | 9 | History (service + store + panel) | **F3** | ⬜ |
 | 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ⬜ |
@@ -78,7 +78,7 @@ Nếu deadline là 11/11 thì chuyển bớt các bước 10–13 sang ngày 11/
 ## 3. Việc cần làm NGAY
 
 1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
-2. ~~Dùng prompt của bước 6~~ → xong 10/11. Tiếp theo dùng prompt của **bước 7** (mục 5 bên dưới).
+2. ~~Dùng prompt của bước 6, 7~~ → xong 10/11. Commit bước 7 rồi dùng prompt của **bước 8** (mục 5 bên dưới).
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 
 ---
@@ -189,6 +189,25 @@ Các method:
   - `Sidebar` bên trái: các nút chuyển card
   - `CardLayout` bên phải: placeholder cho từng màn hình
 - Load dữ liệu bằng `SwingWorker`, có dialog/progress "Đang tải…"; khi đóng cửa sổ thì gọi `DictionaryStore.flush()`
+
+**Chốt với bạn trước khi code (10/11):** lần chạy đầu dùng **tiếng Việt** và **theme tối**; có **nút mặt trời/mặt trăng** ở góc phải thanh menu (phím tắt Ctrl+Shift+L) để đổi sáng ↔ tối, ngoài menu Giao diện; Sidebar có **10 mục đánh số đúng như đề**, chia 3 nhóm TÌM KIẾM (1–3) / QUẢN LÝ (4–7) / KHÁM PHÁ (8–10). About ghi: Nguyễn Anh Khôi, MSSV 24127430.
+
+**Kết quả khi làm (10/11):**
+- Class mới:
+  - `model/Theme`: nằm ở `model` vì `io.SettingsStore` cũng dùng, mà tầng io không được phụ thuộc ngược lên ui.
+  - `ui/Feature`: enum 10 chức năng gồm số thứ tự, nhóm, card, key chữ và phím tắt. Sidebar và menu "Chức năng" cùng dựng từ enum này nên không bao giờ lệch nhau.
+  - `ui/FeatureScreen`: màn hình nào cần biết mình được mở bằng F1 hay F2 thì cài interface này.
+  - `ui/NumberBadgeIcon`, `ui/AppIcon`: icon tự vẽ bằng Java2D, không cần file ảnh.
+  - `ui/LoadingWindow`, `ui/SwingLocalizer`, `ui/dialogs/AboutDialog`, `ui/panels/PlaceholderPanel`.
+- F1–F3 và F8–F10 là **màn hình** (card). F4–F7 là **hành động** (dialog), nên bấm vào không đổi màn hình. Bước 8–12 gắn phần thật bằng `MainFrame.setScreen(card, panel)` và `MainFrame.setAction(feature, runnable)`, không phải sửa MainFrame. Hiện tại hành động chỉ hiện thông báo "đang xây dựng".
+- Phím tắt Ctrl+1 … Ctrl+9, Ctrl+0 (chức năng 10); Ctrl+Q để thoát.
+- Menu Tệp có cả Reset (giống mục 7 trong Chức năng) và Thoát. Tên ngôn ngữ trong menu luôn viết bằng chính ngôn ngữ đó ("Tiếng Việt", "English"), và menu ghi "Ngôn ngữ (Language)", để ai lỡ chọn nhầm vẫn tìm được đường quay lại.
+- Thanh trạng thái hiện số slang, nguồn và thời gian tải, ví dụ "7.638 slang · đọc index từ dictionary.dat trong 85 ms" (số định dạng theo ngôn ngữ). Lỗi ghi `.dat` hiện màu đỏ ở bên phải; dialog cảnh báo chỉ hiện lần đầu.
+- Màn hình "Đang tải…" chỉ hiện nếu việc tải lâu hơn 300 ms. Với 7,6k slang (~0,1 s) nó không hiện, tránh cửa sổ chớp lên rồi tắt; với 100k (~1,6 s) thì có hiện.
+- Thoát app: ẩn cửa sổ ngay, chờ luồng ghi nền lưu xong `.dat` trên một luồng riêng rồi mới `System.exit`. Shutdown hook vẫn giữ làm lưới an toàn.
+- Nút OK/Hủy/Có/Không của `JOptionPane` cũng được dịch (`SwingLocalizer`), vì Swing không có bản dịch tiếng Việt.
+- Exception không ai bắt trên EDT sẽ hiện dialog báo lỗi thay vì im lặng.
+- Đã chạy jar thật: đổi ngôn ngữ và theme ngay khi đang chạy, settings được lưu. Lần mở sau tự dùng lại English + Dark và đọc `.dat` (7.638 slang, ~0,25 s). Với 100k thì màn hình loading hiện, tạo index mất ~1,6 s.
 
 ### Bước 8: `SearchPanel` (F1, F2)
 
