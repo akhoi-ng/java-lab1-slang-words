@@ -86,11 +86,13 @@ Package gốc: `lab01.slangdict._24127430`. Phần tên package không được 
 | `service` | **Nghiệp vụ** của 10 chức năng | `SearchService`, `SearchOutcome` | ✅ |
 | | | `HistoryService` | ✅ |
 | | | `DictionaryService`, `ConflictResolver`, `ChangeResult` (thêm/sửa/xóa) | ✅ |
-| | | `RandomService`, `QuizService` | ⬜ |
+| | | `RandomService` (slang hôm nay + random) | ✅ |
+| | | `QuizService` | ⬜ |
 | `ui` | **Giao diện Swing** | Khung: `MainFrame`, `Sidebar`, `Feature`, `FeatureScreen`, `ThemeManager`, `LoadingWindow`, `SwingLocalizer`, `NumberBadgeIcon`, `AppIcon`, `dialogs/AboutDialog`, `panels/PlaceholderPanel` | ✅ |
 | | | `panels/SearchPanel` (F1, F2), `panels/HistoryPanel` (F3) | ✅ |
 | | | `panels/EntryActions`, `dialogs/EntryEditorDialog`, `dialogs/ConflictDialog` (F4, F5, F6) | ✅ |
-| | | `panels/*` (Random, Quiz), `dialogs/ResetDialog` | ⬜ |
+| | | `panels/ResetAction`, `dialogs/ResetDialog` (F7), `panels/RandomPanel` (F8) | ✅ |
+| | | `panels/QuizPanel` | ⬜ |
 | `i18n` | Chữ song ngữ Anh/Việt, đổi ngay khi đang chạy | `Messages` + `messages_vi/en.properties` | ✅ |
 | `tools` | Sinh 100k slang để benchmark | `BigDataGenerator` | ✅ |
 
@@ -252,7 +254,9 @@ Các điểm thiết kế:
 | F2 prefix | `InvertedIndex.keysInRange` | O(log V + số kết quả) |
 | F2 substring / fuzzy | duyệt hoặc BK-tree trên **tập từ vựng** (số từ khác nhau ít hơn rất nhiều so với tổng số chữ trong mọi definition), rồi tra InvertedIndex | |
 | F2 nhiều từ khóa | **giao** các tập id (AND), sắp xếp bằng `SearchResult.compareTo` | |
-| Random / Quiz | danh sách id cho phép lấy phần tử ngẫu nhiên trong O(1) | O(1) |
+| F8 random khác / Quiz | danh sách id cho phép lấy phần tử ngẫu nhiên trong O(1) | O(1) |
+| F8 slang hôm nay | duyệt mọi entry, lấy entry có điểm `score(ngày, id)` cao nhất (xem 4.15) | O(n), 100k: vài ms |
+| F7 reset | build lại `SlangDictionary` mới từ `slang.txt` gốc, thay object cũ | O(tổng độ dài file) |
 | Mọi entry | `HashMap<id, SlangEntry>` | O(1) |
 
 Tất cả được gói trong `SlangDictionary` và serialize cùng nhau thành **một** file `.dat`.
@@ -676,6 +680,50 @@ Có nhiều entry cùng tên thì người dùng chọn **entry đích** trong d
 
 **Giới hạn còn lại (chỉ ở 100k):** nếu đúng lúc luồng ghi đang serialize (~2 s) mà người dùng thêm/sửa/xóa tiếp, thao tác đó chờ ghi xong. Muốn bỏ hẳn thì phải ghi nhật ký thay đổi (journal) thay vì serialize cả từ điển mỗi lần.
 
+### 4.15 Reset và Slang hôm nay (bước 11, F7 + F8): `ResetAction`, `ResetDialog`, `RandomService`, `RandomPanel`
+
+**Luồng Reset:**
+
+```
+Ctrl+7 / Sidebar / menu Tệp → ResetAction.run()                       (EDT)
+  → ResetDialog: "Đưa từ điển về danh sách gốc?" + [ ] Xóa cả lịch sử ── Hủy ──► thôi
+  → khóa cửa sổ (con trỏ chờ; "Đang khôi phục…" nếu lâu hơn 0,3 s)
+  → DictionaryService.loadOriginal()                                   (luồng nền "reset")
+       đọc data/slang.txt nếu có, không thì slang.txt nhúng trong jar → SlangDictionary MỚI
+  → DictionaryService.replaceDictionary(mới)                           (EDT)
+       gán field volatile + lưu .dat nền + báo listener (thanh trạng thái, màn hình Slang hôm nay)
+  → (nếu chọn) HistoryService.clear() → màn hình Lịch sử tự trống (Observer, mục 4.13)
+  → SearchPanel.showReload: tìm lại lần đang hiện trên dữ liệu mới
+  → mở khóa cửa sổ, báo "Đã khôi phục 7.638 slang (tạo index trong 120 ms)"
+```
+
+- **Reset = thay cả object**, không xóa từng entry rồi thêm lại. Mọi nơi đọc từ điển đều đi qua `dictionaryService::current` (một `Supplier`, mục 4.9), nên chỉ cần gán lại **một field**. Field là `volatile` để luồng tìm kiếm thấy ngay object mới. Lần tìm đang chạy dở trên object cũ vẫn xong bình thường vì object cũ không bị ai sửa.
+- **Build trên luồng nền:** 7,6k slang mất ~0,1 s nhưng file 100k mất ~1,5 s, làm trên EDT thì cửa sổ đứng. Từ điển cũ không bị đụng tới trong lúc build, nên file gốc lỗi (thiếu, sai định dạng) chỉ làm hiện thông báo lỗi; từ điển và lịch sử giữ nguyên.
+- **Khóa cửa sổ** (`frame.setEnabled(false)`) trong lúc build: nếu không, người dùng có thể kịp mở dialog Sửa trên entry sắp biến mất.
+- Dialog: nút mặc định (Enter) là **Hủy**, checkbox "Xóa cả lịch sử" mặc định **không** chọn (lịch sử trống thì checkbox bị tắt). Dialog ghi rõ đang có bao nhiêu slang và file gốc nằm ở đâu.
+- `ResetAction` nhận hai `Executor` (luồng nền, EDT) và một interface `Ui`. App truyền luồng mới + `SwingUtilities::invokeLater` + dialog thật; test truyền `Runnable::run` + giao diện giả nên chạy hết luồng mà không mở cửa sổ nào.
+
+**Slang hôm nay ("On this day"):** đề yêu cầu cả ngày ra cùng một slang. Cách đơn giản `new Random(ngày).nextInt(size)` có nhược điểm: kết quả phụ thuộc số entry và thứ tự của chúng, nên thêm hay xóa **bất kỳ** slang nào cũng làm slang hôm nay đổi sang từ khác. Ở đây dùng **rendezvous hashing** (highest random weight):
+
+```
+score(ngày, id) = mix(mix(ngày) + id)      ← mix = hàm trộn bit của SplitMix64 (thuật toán của SplittableRandom)
+slang hôm nay   = entry có score cao nhất  (hòa thì id nhỏ hơn)
+```
+
+- Điểm của mỗi entry chỉ phụ thuộc **ngày và id của chính nó**. Thêm một slang chỉ đổi kết quả nếu slang mới thắng tất cả (xác suất 1/n); xóa chỉ đổi kết quả nếu xóa đúng slang hôm nay; sửa nghĩa (giữ id) không bao giờ đổi. Tắt app mở lại vẫn ra đúng slang đó vì id được lưu trong `.dat`.
+- Sang ngày khác thì điểm của mọi entry bị "xáo" lại, mỗi entry có cơ hội như nhau (test chạy 5.000 ngày trên 10 entry, mỗi entry trúng khoảng 500 lần).
+- Cái giá: phải duyệt hết O(n) thay vì O(1). 100k slang mất vài ms, và màn hình chỉ tính lại khi được mở mà dữ liệu đã đổi hoặc đã sang ngày mới.
+
+**Random khác:** `SlangDictionary.randomEntry` lấy phần tử ngẫu nhiên của danh sách id trong O(1) (swap-remove, mục 4.7). `RandomService.random(idĐangHiện)` bốc lại nếu trúng đúng slang đang hiện, nên bấm "Random khác" luôn ra slang mới.
+
+**`RandomPanel`:**
+- Thẻ bo góc tự vẽ bằng Java2D (`RoundRectangle2D`, vạch màu nhấn bên trái được `clip` theo góc bo), màu lấy từ theme nên đổi sáng/tối vẫn đẹp. Thẻ cao vừa nội dung; slang nhiều nghĩa thì cả vùng cuộn được (panel cài `Scrollable` để luôn rộng bằng khung nhìn, chữ tự xuống dòng).
+- Nút: **Random khác** (R), **Về slang hôm nay** (H), **Tra trong từ điển** (Enter): mở slang đó ở màn hình tìm kiếm (EXACT) để xem, sửa hoặc xóa.
+- Ngày hiện theo ngôn ngữ (`EEEE, dd/MM/yyyy` → "Thứ Tư, 11/11/2026"; `EEEE, MMMM d, yyyy` → "Wednesday, November 11, 2026").
+- Nghe `DictionaryService.addChangeListener`: slang đang hiện bị sửa thì hiện bản mới (đọc lại theo id), bị xóa thì chọn slang khác, sau Reset thì tính lại trên từ điển mới. Màn hình đang ẩn thì chỉ đánh dấu "cần tính lại" (`stale`), để dành tới lúc được mở.
+
+**Thanh trạng thái** sau Reset ghi "7.638 slang · khôi phục từ slang.txt gốc trong 120 ms" thay cho nguồn lúc khởi động.
+
 ---
 
 ## 5. Unit test
@@ -699,14 +747,18 @@ Có nhiều entry cùng tên thì người dùng chọn **entry đích** trong d
 | `io/HistoryStoreTest` | Chưa có file → rỗng; lưu rồi đọc lại đúng mọi field và thứ tự (kể cả `:\|`, UTF-8), không sót `.tmp`; sai magic/phiên bản, cắt cụt, rác, file rỗng đều bị từ chối; class lạ bị filter chặn **trước khi** khởi tạo; danh sách chứa thứ khác `HistoryItem` bị từ chối; 200 lần lưu nền dồn dập ra đúng bản cuối; lỗi ghi nền và lưu sau khi `close` được báo qua listener |
 | `service/HistoryServiceTest` | Mới nhất ở đầu và còn nguyên sau khi "mở lại app"; mỗi thay đổi báo listener đúng một lần; lặp lại lần tìm mới nhất chỉ cập nhật thời gian (khác mode hoặc trùng dòng cũ thì vẫn thêm); giữ tối đa 1.000 dòng, bỏ dòng cũ nhất; xóa nhiều vị trí (bỏ qua trùng/ngoài phạm vi, không có gì để xóa thì không lưu); `clear` cả trên đĩa; `items()` chỉ đọc; file hỏng → rỗng rồi ghi đè; file quá 1.000 dòng bị cắt khi đọc |
 | `ui/panels/HistoryPanelTest` | Màn hình trống khi chưa có lịch sử; cột thời gian/loại/kiểu khớp đúng ngôn ngữ (cả tiêu đề cột, số ít/số nhiều tiếng Anh); tìm lại đúng dòng chọn; xóa nhiều dòng rồi chọn dòng kế tiếp; "Xóa tất cả" hỏi trước (Không → giữ, Có → xóa); **nối dây giống App**: tìm ở SearchPanel → có lịch sử → tìm lại từ lịch sử → SearchPanel sang F2, đúng query, đúng kết quả |
-| `service/DictionaryServiceTest` | Thêm tên mới không hỏi và có lưu xuống `.dat`; trùng tên thì hỏi với đúng các entry cùng tên; **3 lựa chọn × thêm/đổi tên** (ghi đè giữ id, thêm nghĩa bỏ nghĩa đã có, tạo bản mới; đổi tên ghi đè xóa entry kia, gộp nghĩa xóa entry đang sửa); nhiều entry cùng tên thì tác động đúng entry được chọn; hủy thì không đổi gì; sửa không đổi tên thì không hỏi; không đổi gì thì không lưu; index tên và index nghĩa được cập nhật (tìm EXACT/FUZZY sau khi đổi tên); dữ liệu sai bị từ chối; resolver không được chọn entry lạ |
+| `service/DictionaryServiceTest` | (bước 11) Reset: về đúng 7.638 slang, slang vừa thêm biến mất, slang gốc bị sửa/xóa trở lại như cũ, chỉ báo listener một lần, đã lưu `.dat`, là object mới (object cũ không bị sửa), ưu tiên `data/slang.txt`, file gốc lỗi thì giữ nguyên từ điển. (bước 10) Thêm tên mới không hỏi và có lưu xuống `.dat`; trùng tên thì hỏi với đúng các entry cùng tên; **3 lựa chọn × thêm/đổi tên** (ghi đè giữ id, thêm nghĩa bỏ nghĩa đã có, tạo bản mới; đổi tên ghi đè xóa entry kia, gộp nghĩa xóa entry đang sửa); nhiều entry cùng tên thì tác động đúng entry được chọn; hủy thì không đổi gì; sửa không đổi tên thì không hỏi; không đổi gì thì không lưu; index tên và index nghĩa được cập nhật (tìm EXACT/FUZZY sau khi đổi tên); dữ liệu sai bị từ chối; resolver không được chọn entry lạ |
 | `ui/panels/EntryActionsTest` | Trọn luồng như trong app với dialog giả: thêm → màn hình Search hiện và chọn sẵn entry mới, có thông báo; tên điền sẵn từ ô tìm; "Quay lại sửa" mở lại dialog với dữ liệu cũ; thêm nghĩa giữ nguyên lần tìm đang xem; đổi tên ra khỏi kết quả thì tự tìm tên mới; đổi tên trùng → ghi đè; xóa hỏi trước, chọn dòng kế tiếp, đã lưu xuống `.dat`; chưa chọn gì thì hiện hướng dẫn |
 | `ui/dialogs/EntryDialogsTest` | Dialog nhập: dòng nghĩa trống sẵn khi thêm, báo đúng lỗi (tên trống, không có nghĩa, nghĩa chứa `\|`) và đưa con trỏ tới dòng sai, cảnh báo trùng tên theo chữ đang gõ (sửa mà không đổi tên thì không báo), thêm/xóa/lên/xuống nghĩa, ô đang gõ dở vẫn được tính khi Lưu. Dialog trùng tên: trả về đúng lựa chọn + entry đích, chữ mô tả theo thêm/sửa, thoát ký tự HTML |
+| `service/RandomServiceTest` | Cùng ngày luôn ra cùng slang, kể cả "mở lại app" (build lại từ file); 60 ngày ra ≥ 55 slang khác nhau; 5.000 ngày trên 10 entry thì entry nào cũng trúng ~500 lần; **thêm một slang thì một ngày chỉ có thể đổi sang chính slang mới** (365 ngày, đổi ≤ 3 ngày); sửa nghĩa giữ nguyên slang của ngày; xóa chỉ đổi ngày có slang bị xóa; random không lặp lại slang đang hiện và đi tới mọi entry; từ điển trống/1 entry; luôn dùng từ điển hiện tại (giống sau Reset) |
+| `ui/panels/ResetActionTest` | Hủy thì không đổi gì và không khóa cửa sổ; dialog nhận đúng số slang/số lịch sử/file gốc; reset giữ lịch sử nếu không chọn, xóa nếu chọn; màn hình Search tìm lại trên dữ liệu gốc (slang người dùng thêm biến mất) và hiện thông báo; khóa rồi mở khóa cửa sổ; đã lưu xuống `.dat`; file gốc lỗi → báo lỗi, từ điển và lịch sử giữ nguyên, sửa file xong thì reset lại được |
+| `ui/panels/RandomPanelTest` | Mở màn hình ra slang của ngày (đúng chữ, đúng nghĩa đánh số, nút "Về hôm nay" tắt); Random khác rồi quay về hôm nay; qua nửa đêm thì đổi sang slang của ngày mới; slang đang hiện bị sửa thì hiện nghĩa mới; slang random bị xóa thì chọn slang khác mà vẫn ở chế độ random; sau Reset lấy từ từ điển mới; "Tra trong từ điển"; từ điển trống; đổi ngôn ngữ thì ngày đổi theo ("Wednesday, November 11, 2026") |
+| `ui/dialogs/ResetDialogTest` | Checkbox "xóa cả lịch sử" mặc định không chọn, bị tắt khi lịch sử trống; hiện số slang theo định dạng ngôn ngữ; file gốc trong jar ghi thành chữ dễ hiểu, đường dẫn ngoài được thoát ký tự HTML |
 | `ui/FeatureTest` | Đúng 10 chức năng đánh số 1–10; mọi card đều có chức năng, F4–F7 là hành động; phím tắt không trùng (Ctrl+1 … Ctrl+0); mọi chức năng và nhóm có chữ ở cả hai ngôn ngữ. Không tạo cửa sổ nên chạy được trên máy không có màn hình |
 
 Bước 10 cũng thêm vào `DictionaryStoreTest` (hoãn ghi thì chưa ghi ngay nhưng hết giờ là ghi; `close()` ghi ngay lần đang hẹn giờ 60 s) và `SearchServiceTest` (thời gian tìm không tính lúc chờ khóa).
 
-Tổng cộng **167 test** (tới hết bước 10). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống; bước 10 chạy jar thật ở 7,6k và 100k (thêm, thêm trùng → thêm nghĩa / tạo bản mới, đổi tên trùng 2 mục → quay lại, xóa, theme sáng + English) rồi đọc lại `dictionary.dat` sau khi thoát.
+Tổng cộng **204 test** (tới hết bước 11). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống; bước 10 chạy jar thật ở 7,6k và 100k (thêm, thêm trùng → thêm nghĩa / tạo bản mới, đổi tên trùng 2 mục → quay lại, xóa, theme sáng + English) rồi đọc lại `dictionary.dat` sau khi thoát; bước 11 chạy app thật (harness tự bấm, chụp màn hình): slang hôm nay, Random khác, slang 14 nghĩa dài (xuống dòng + cuộn), theme sáng + English, Tra trong từ điển, dialog Reset có tick "xóa cả lịch sử", thông báo kết quả, thanh trạng thái, Lịch sử trống sau Reset.
 
 Test có ghi file dùng `testutil/ScratchDir` thay cho `@TempDir`: trên Windows, trình diệt virus đôi khi còn giữ file vừa ghi, khiến `@TempDir` dọn dẹp thất bại và đánh fail cả test dù test đúng.
 
@@ -760,6 +812,10 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | `LinkedHashMap.putIfAbsent` | `DictionaryService.cleanMeanings` (bỏ trùng mà giữ thứ tự) |
 | `ScheduledThreadPoolExecutor` (debounce) | `DictionaryStore.saveInBackground` hoãn ghi 1,5 s |
 | `JDialog` modal, `JTable` sửa trực tiếp, `TableCellEditor` | `EntryEditorDialog` (bảng nghĩa), `ConflictDialog` |
+| Hashing, hàm trộn bit (SplitMix64), rendezvous hashing | `RandomService.onThisDay` / `score` |
+| `java.time.LocalDate.toEpochDay`, `Supplier<LocalDate>` (giả ngày khi test) | `RandomService`, `RandomPanel` |
+| `Executor` (truyền vào để test chạy đồng bộ), thay object qua field `volatile` | `ResetAction`, `DictionaryService.replaceDictionary` |
+| `Scrollable`, `RoundRectangle2D` + `clip` | `RandomPanel` (nội dung luôn rộng bằng khung nhìn, thẻ bo góc) |
 
 ---
 

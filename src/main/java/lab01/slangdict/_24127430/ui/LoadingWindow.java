@@ -30,6 +30,11 @@ public class LoadingWindow extends JWindow {
     private final Timer showTimer;
 
     public LoadingWindow() {
+        this("loading.message");
+    }
+
+    /** @param messageKey chữ dưới tiêu đề, ví dụ {@code reset.loading} khi khôi phục dữ liệu gốc */
+    public LoadingWindow(String messageKey) {
         setIconImages(AppIcon.images());
         JPanel content = new JPanel(new BorderLayout(0, 14));
         content.setBorder(BorderFactory.createCompoundBorder(
@@ -41,7 +46,7 @@ public class LoadingWindow extends JWindow {
         Font font = UIManager.getFont("Label.font");
         title.setFont(font.deriveFont(Font.BOLD, font.getSize2D() + 8f));
 
-        JLabel message = new JLabel(Messages.get("loading.message"));
+        JLabel message = new JLabel(Messages.get(messageKey));
         JProgressBar progress = new JProgressBar();
         progress.setIndeterminate(true); // không biết trước tổng thời gian → thanh chạy liên tục
 

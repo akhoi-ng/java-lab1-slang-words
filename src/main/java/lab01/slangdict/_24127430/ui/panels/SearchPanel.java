@@ -299,6 +299,15 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         }
     }
 
+    /**
+     * Sau khi cả từ điển được thay (Reset, F7): hiện thông báo và chạy lại lần tìm đang hiện trên dữ liệu mới, chọn
+     * kết quả tốt nhất (id cũ không còn ý nghĩa). Không ghi lịch sử.
+     */
+    public void showReload(String noticeKey, Object... args) {
+        setNotice(NoticeKind.SUCCESS, noticeKey, args);
+        refresh();
+    }
+
     /** Hướng dẫn ngắn (ví dụ "hãy chọn một slang trước"), đưa focus về ô tìm. */
     public void showHint(String noticeKey, Object... args) {
         setNotice(NoticeKind.INFO, noticeKey, args);

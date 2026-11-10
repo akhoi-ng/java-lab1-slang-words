@@ -15,8 +15,11 @@ import lab01.slangdict._24127430.i18n.Messages;
 import lab01.slangdict._24127430.io.DictionaryStore;
 import lab01.slangdict._24127430.io.HistoryStore;
 import lab01.slangdict._24127430.io.SettingsStore;
+import lab01.slangdict._24127430.model.SearchMode;
+import lab01.slangdict._24127430.model.SearchTarget;
 import lab01.slangdict._24127430.service.DictionaryService;
 import lab01.slangdict._24127430.service.HistoryService;
+import lab01.slangdict._24127430.service.RandomService;
 import lab01.slangdict._24127430.service.SearchService;
 import lab01.slangdict._24127430.ui.Feature;
 import lab01.slangdict._24127430.ui.LoadingWindow;
@@ -25,6 +28,8 @@ import lab01.slangdict._24127430.ui.SwingLocalizer;
 import lab01.slangdict._24127430.ui.ThemeManager;
 import lab01.slangdict._24127430.ui.panels.EntryActions;
 import lab01.slangdict._24127430.ui.panels.HistoryPanel;
+import lab01.slangdict._24127430.ui.panels.RandomPanel;
+import lab01.slangdict._24127430.ui.panels.ResetAction;
 import lab01.slangdict._24127430.ui.panels.SearchPanel;
 
 /**
@@ -138,6 +143,15 @@ public final class App {
         frame.setAction(Feature.EDIT, entryActions::edit);
         frame.setAction(Feature.DELETE, entryActions::delete);
         dictionary.addChangeListener(() -> frame.showDictionarySize(dictionary.size()));
+
+        // F7: xác nhận (có "xóa cả lịch sử") → build lại từ slang.txt gốc trên luồng nền → thay từ điển hiện tại
+        frame.setAction(Feature.RESET, new ResetAction(dictionary, history, searchPanel, frame));
+
+        // F8: slang hôm nay + random khác; "Tra trong từ điển" = tìm EXACT theo slang ở màn hình Search
+        RandomPanel randomPanel = new RandomPanel(new RandomService(dictionary::current),
+                slang -> searchPanel.search(SearchTarget.SLANG, SearchMode.EXACT, slang));
+        dictionary.addChangeListener(randomPanel::dictionaryChanged);
+        frame.setScreen(Feature.Card.RANDOM, randomPanel);
     }
 
     /** Chạy trên EDT. {@code dialogKey}: chữ của dialog cảnh báo, khác nhau cho từ điển và lịch sử. */

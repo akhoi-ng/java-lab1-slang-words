@@ -1,5 +1,6 @@
 package lab01.slangdict._24127430.service;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -15,6 +16,7 @@ import lab01.slangdict._24127430.core.SlangDictionary;
 import lab01.slangdict._24127430.core.Tokenizer;
 import lab01.slangdict._24127430.io.DictionaryStore;
 import lab01.slangdict._24127430.io.SlangFileParser;
+import lab01.slangdict._24127430.io.SlangFormatException;
 import lab01.slangdict._24127430.model.ConflictResolution;
 import lab01.slangdict._24127430.model.SlangEntry;
 import lab01.slangdict._24127430.service.ConflictResolver.Conflict;
@@ -22,8 +24,9 @@ import lab01.slangdict._24127430.service.ConflictResolver.Decision;
 import lab01.slangdict._24127430.service.ConflictResolver.Operation;
 
 /**
- * Thêm (F4), sửa (F5), xóa (F6) slang. Giữ "từ điển hiện tại" cho cả app: các service khác lấy từ điển qua
- * {@link #current()}, vì Reset (F7, bước 11) sẽ thay bằng một object từ điển mới.
+ * Thêm (F4), sửa (F5), xóa (F6) slang và Reset về dữ liệu gốc (F7). Giữ "từ điển hiện tại" cho cả app: các
+ * service khác lấy từ điển qua {@link #current()}, vì Reset thay bằng một object từ điển mới
+ * ({@link #replaceDictionary}).
  * <p>
  * <b>Trùng tên</b> (không phân biệt hoa thường) thì hỏi {@link ConflictResolver}, có 3 lựa chọn:
  * <pre>
@@ -288,7 +291,50 @@ public class DictionaryService {
         return committed(null, removed, List.of(removed));
     }
 
-    /** Listener được gọi (trên luồng vừa sửa, tức EDT) sau mỗi thay đổi thật sự của từ điển. */
+    // ===================== Reset (F7) =====================
+
+    /**
+     * Build một từ điển mới từ slang.txt gốc (data/slang.txt nếu có, không thì bản nhúng trong jar). Không đụng tới
+     * từ điển hiện tại, nên gọi được trên luồng nền (7,6k slang: ~0,1 s; file 100k: ~1,5 s).
+     *
+     * @throws SlangFormatException file gốc sai định dạng (kèm số dòng)
+     * @throws IOException          không đọc được file gốc
+     */
+    public SlangDictionary loadOriginal() throws IOException, SlangFormatException {
+        return store.loadOriginal();
+    }
+
+    /** File gốc mà {@link #loadOriginal} sẽ đọc (để hiện trong dialog xác nhận). */
+    public String originalSource() {
+        return store.originalSourceDescription();
+    }
+
+    /**
+     * Thay <b>cả</b> từ điển hiện tại bằng {@code fresh} (thường là kết quả của {@link #loadOriginal}), lưu nền rồi
+     * báo listener. Gọi trên EDT.
+     * <p>
+     * Chỉ cần gán lại một field: SearchService, RandomService... đều lấy từ điển qua {@link #current()}, nên lần đọc
+     * kế tiếp tự dùng bản mới. Field là {@code volatile} nên luồng tìm kiếm thấy ngay object mới. Lần tìm đang chạy dở
+     * trên object cũ vẫn xong bình thường (object cũ không bị sửa), giao diện tìm lại sau đó.
+     */
+    public void replaceDictionary(SlangDictionary fresh) {
+        dictionary = Objects.requireNonNull(fresh, "fresh");
+        store.saveInBackground(fresh); // lần lưu đang chờ của từ điển cũ (nếu có) bị thay bằng bản này
+        listeners.forEach(Runnable::run);
+    }
+
+    /**
+     * F7: đưa từ điển về danh sách gốc ({@link #loadOriginal} rồi {@link #replaceDictionary}) ngay trên luồng gọi.
+     * Giao diện tách hai bước để phần build chạy trên luồng nền.
+     *
+     * @return số slang sau khi reset
+     */
+    public int reset() throws IOException, SlangFormatException {
+        replaceDictionary(loadOriginal());
+        return size();
+    }
+
+    /** Listener được gọi (trên luồng vừa sửa, tức EDT) sau mỗi thay đổi thật sự của từ điển, kể cả Reset. */
     public void addChangeListener(Runnable listener) {
         listeners.add(Objects.requireNonNull(listener, "listener"));
     }

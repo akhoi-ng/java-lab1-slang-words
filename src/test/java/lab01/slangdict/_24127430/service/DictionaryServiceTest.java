@@ -358,4 +358,77 @@ class DictionaryServiceTest {
         assertSame(before, service.current());
         assertFalse(service.current().idsByName("new").isEmpty());
     }
+
+    // ===================== Reset (F7) =====================
+
+    /** Số entry của slang.txt gốc (đã sửa lỗi), xem SlangFileParserTest. */
+    private static final int ORIGINAL_SIZE = 7638;
+
+    @Test
+    void resetRestoresTheOriginalListAndSavesIt() throws Exception {
+        SearchService search = new SearchService(service::current);
+        service.add("yeet", List.of("To throw"), mustNotAsk);
+        int changesBefore = changes.get();
+
+        assertEquals(ORIGINAL_SIZE, service.reset());
+
+        assertEquals(ORIGINAL_SIZE, service.size());
+        assertEquals(changesBefore + 1, changes.get(), "one notification for the whole reset");
+        // Slang vừa thêm biến mất, slang gốc tìm thấy được qua SearchService (lấy từ điển qua current)
+        assertEquals(0, search.search(SearchTarget.SLANG, SearchMode.EXACT, "yeet", 10).totalMatches());
+        assertEquals(List.of("Dollar", "money"),
+                search.search(SearchTarget.SLANG, SearchMode.EXACT, "$", 10).results().get(0).entry().getMeanings());
+        // "Mở lại app" thấy dữ liệu gốc
+        assertEquals(ORIGINAL_SIZE, reloadFromDisk().size());
+    }
+
+    @Test
+    void resetUndoesEditsAndDeletesOfOriginalSlangs() throws Exception {
+        service.reset();
+        int dollar = service.entriesNamed("$").get(0).getId();
+        service.edit(dollar, "$$", List.of("edited"), mustNotAsk);
+        service.delete(service.entriesNamed("#1").get(0).getId());
+
+        service.reset();
+
+        assertEquals(List.of("Dollar", "money"), service.get(dollar).getMeanings());
+        assertEquals("$", service.get(dollar).getSlang());
+        assertEquals(1, service.entriesNamed("#1").size());
+        assertTrue(service.entriesNamed("$$").isEmpty());
+    }
+
+    @Test
+    void resetReplacesTheDictionaryObject() throws Exception {
+        SlangDictionary before = service.current();
+        service.reset();
+        assertFalse(before == service.current(), "a new object, the old one is left untouched");
+        assertEquals(4, before.size());
+    }
+
+    @Test
+    void resetPrefersSlangTxtNextToTheJar() throws Exception {
+        java.nio.file.Files.writeString(dir.resolve("slang.txt"), "Slag`Meaning\nabc`First|Second\nxyz`Third\n");
+
+        assertEquals(2, service.reset());
+
+        assertEquals(List.of("First", "Second"), service.entriesNamed("abc").get(0).getMeanings());
+        assertEquals(dir.resolve("slang.txt").toString(), service.originalSource());
+    }
+
+    @Test
+    void brokenOriginalFileLeavesTheDictionaryAsItWas() throws Exception {
+        java.nio.file.Files.writeString(dir.resolve("slang.txt"), "abc`First\nno separator here\n");
+        SlangDictionary before = service.current();
+
+        assertThrows(lab01.slangdict._24127430.io.SlangFormatException.class, service::reset);
+
+        assertSame(before, service.current());
+        assertEquals(4, service.size());
+        assertEquals(0, changes.get());
+    }
+
+    @Test
+    void originalSourceIsTheBundledFileByDefault() {
+        assertTrue(service.originalSource().startsWith("jar:"), service.originalSource());
+    }
 }

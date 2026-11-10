@@ -63,7 +63,6 @@ import lab01.slangdict._24127430.ui.panels.PlaceholderPanel;
 public class MainFrame extends JFrame {
 
     private final SettingsStore settings;
-    private final DictionaryStore.LoadResult loaded;
     private final Path dataDir;
     private final String version;
 
@@ -94,6 +93,9 @@ public class MainFrame extends JFrame {
     private final JLabel statusInfo = new JLabel();
     /** Số slang hiện trên thanh trạng thái; đổi theo mỗi lần thêm/xóa ({@link #showDictionarySize}). */
     private int dictionarySize;
+    /** Từ điển đến từ đâu, mất bao lâu: lúc khởi động là .dat hay slang.txt; sau Reset là "khôi phục từ file gốc". */
+    private String sourceKey;
+    private long sourceMillis;
     private final JLabel statusMessage = new JLabel();
     private String statusMessageKey;
     private Object[] statusMessageArgs = {};
@@ -105,10 +107,11 @@ public class MainFrame extends JFrame {
     public MainFrame(SettingsStore settings, DictionaryStore.LoadResult loaded, Path dataDir,
                      String version, Runnable exitHandler) {
         this.settings = settings;
-        this.loaded = loaded;
         this.dataDir = dataDir;
         this.version = version;
         this.dictionarySize = loaded.dictionary().size();
+        this.sourceKey = loaded.source() == DictionaryStore.Source.DAT ? "status.loaded.dat" : "status.loaded.text";
+        this.sourceMillis = loaded.elapsedMillis();
 
         setIconImages(AppIcon.images());
         setJMenuBar(buildMenuBar());
@@ -191,6 +194,14 @@ public class MainFrame extends JFrame {
     /** Cập nhật số slang trên thanh trạng thái (App gọi sau mỗi lần từ điển thay đổi). */
     public void showDictionarySize(int size) {
         dictionarySize = size;
+        updateStatusInfo();
+    }
+
+    /** Sau Reset (F7): thanh trạng thái ghi "khôi phục từ slang.txt gốc trong X ms" thay cho nguồn lúc khởi động. */
+    public void showDictionaryReset(int size, long elapsedMillis) {
+        dictionarySize = size;
+        sourceKey = "status.reset";
+        sourceMillis = elapsedMillis;
         updateStatusInfo();
     }
 
@@ -340,8 +351,7 @@ public class MainFrame extends JFrame {
     }
 
     private void updateStatusInfo() {
-        String sourceKey = loaded.source() == DictionaryStore.Source.DAT ? "status.loaded.dat" : "status.loaded.text";
-        statusInfo.setText(Messages.format(sourceKey, dictionarySize, loaded.elapsedMillis()));
+        statusInfo.setText(Messages.format(sourceKey, dictionarySize, sourceMillis));
     }
 
     private void updateTitle() {

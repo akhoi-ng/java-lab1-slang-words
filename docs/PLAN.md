@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–9, bước 10 xong code nhưng chưa commit** → commit bước 10 rồi làm bước 11 |
-| Test | 167/167 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 14 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
+| Bước đang ở | **Xong bước 1–10, bước 11 xong code nhưng chưa commit** → commit bước 11 rồi làm bước 12 |
+| Test | 204/204 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 15 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -57,8 +57,8 @@
 | 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ✅ 10/11 |
 | 8 | `SearchPanel` | **F1, F2** | ✅ 11/11 |
 | 9 | History (service + store + panel) | **F3** | ✅ 11/11 |
-| 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | 🟡 11/11 |
-| 11 | Reset + Random | **F7, F8** | ⬜ |
+| 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ✅ 11/11 |
+| 11 | Reset + Random | **F7, F8** | 🟡 11/11 |
 | 12 | Quiz (2 loại) | **F9, F10** | ⬜ |
 | 13 | README, file tự chấm điểm, rà lại, jar cuối | nộp bài | ⬜ |
 
@@ -77,7 +77,7 @@
 ## 3. Việc cần làm NGAY
 
 1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
-2. ~~Dùng prompt của bước 6, 7, 8, 9, 10~~ → xong. Commit bước 10 rồi dùng prompt của **bước 11** (mục 5 bên dưới).
+2. ~~Dùng prompt của bước 6 → 11~~ → xong. Commit bước 11 rồi dùng prompt của **bước 12** (mục 5 bên dưới).
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 
 ---
@@ -297,6 +297,22 @@ Các method:
   - `random()`: chọn ngẫu nhiên bất kỳ
 - `RandomPanel`: thẻ lớn hiện ngày, slang và các nghĩa; nút "Random khác", "Về slang hôm nay"
 - Test: cùng ngày ra cùng entry; reset trả về đúng 7.638 entry
+
+**Kết quả khi làm (11/11):**
+- Class mới / thay đổi:
+  - `DictionaryService`: `loadOriginal()` (build từ điển mới từ file gốc, gọi được trên luồng nền), `replaceDictionary(mới)` (gán field `volatile`, lưu nền, báo listener), `reset()` = gộp hai bước trên (dùng cho test), `originalSource()`.
+  - `ui/panels/ResetAction`: nối `ResetDialog` ↔ luồng nền ↔ `DictionaryService` ↔ `HistoryService` ↔ `SearchPanel`. Giao diện đi qua interface `Ui`, hai `Executor` (luồng nền, EDT) truyền vào, nên test chạy trọn luồng mà không mở cửa sổ.
+  - `ui/dialogs/ResetDialog`: nội dung là class `Form` (test được), `JOptionPane` chỉ bọc ngoài.
+  - `service/RandomService`, `ui/panels/RandomPanel`.
+  - `MainFrame.showDictionaryReset`, `SearchPanel.showReload`, `LoadingWindow(messageKey)`.
+- Bổ sung / khác so với đặc tả:
+  - **Slang hôm nay dùng rendezvous hashing** thay cho `new Random(ngày)`: entry có `score(ngày, id)` cao nhất thắng. Với `new Random(ngày).nextInt(size)`, thêm/xóa **bất kỳ** slang nào cũng đổi slang hôm nay (lúc quay video sẽ trông như lỗi). Ở đây thêm slang chỉ đổi kết quả với xác suất 1/n, sửa nghĩa không bao giờ đổi, xóa chỉ đổi nếu xóa đúng slang hôm nay. Giá phải trả: O(n) thay vì O(1), 100k vẫn chỉ vài ms. Giải thích ở ARCHITECTURE 4.15.
+  - "Random khác" không bao giờ ra lại slang đang hiện. Thêm nút **Tra trong từ điển** (Enter): mở slang đó ở màn hình tìm kiếm (EXACT) để sửa/xóa. Phím R / H / Enter.
+  - Reset **build trên luồng nền** (100k: ~1,5 s), cửa sổ bị khóa trong lúc build (không kịp mở Sửa/Xóa trên từ điển sắp bị thay), màn hình "Đang khôi phục…" chỉ hiện nếu lâu hơn 0,3 s. File gốc lỗi → báo lỗi, từ điển và lịch sử giữ nguyên.
+  - Reset đọc `data/slang.txt` nếu có (ví dụ đang thử bản 100k), không thì bản nhúng trong jar; dialog ghi rõ đang dùng file nào và hiện số slang hiện có. Nút mặc định là **Hủy**, checkbox "Xóa cả lịch sử" mặc định không chọn, bị tắt khi lịch sử trống.
+  - Sau Reset: màn hình Search tìm lại trên dữ liệu mới và hiện "✓ Đã khôi phục từ điển gốc (7.638 slang)"; thanh trạng thái ghi "khôi phục từ slang.txt gốc trong N ms"; dialog báo kết quả (kèm "Đã xóa lịch sử" nếu có).
+  - Màn hình Slang hôm nay nghe thay đổi của từ điển: slang đang hiện bị sửa → hiện nghĩa mới; bị xóa → chọn slang khác; qua nửa đêm → slang của ngày mới. Màn hình đang ẩn thì để dành tới lúc được mở.
+- Đã chạy app thật (harness tự bấm, chụp màn hình): slang hôm nay ở theme tối/tiếng Việt, Random khác, slang 14 nghĩa dài (xuống dòng, cuộn), theme sáng + English (ngày "Wednesday, November 11, 2026"), Tra trong từ điển, dialog Reset có tick xóa lịch sử, thông báo "Đã khôi phục 7.638 slang", Lịch sử trống, thanh trạng thái đúng.
 
 ### Bước 12: Quiz (F9, F10)
 
