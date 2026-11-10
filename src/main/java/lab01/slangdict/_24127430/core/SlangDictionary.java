@@ -1,5 +1,7 @@
 package lab01.slangdict._24127430.core;
 
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,7 +44,10 @@ import lab01.slangdict._24127430.model.SlangEntry;
  * {@link #add}, {@link #replace}, {@link #remove}; ba method này luôn gỡ/gắn index theo cặp
  * {@link #unindex}/{@link #index}. Test so sánh với một từ điển build lại từ đầu để kiểm chứng.
  * <p>
- * Không thread-safe: chỉ dùng trên một luồng (EDT); khi lưu nền thì serialize snapshot trước.
+ * <b>Luồng:</b> đọc và sửa trên một luồng duy nhất (EDT). Ngoại lệ là luồng ghi nền của DictionaryStore
+ * serialize từ điển song song. Để bản ghi luôn nhất quán, {@link #writeObject} và ba method sửa dữ liệu
+ * cùng {@code synchronized} trên chính object này (giống cách {@code java.util.Vector} làm):
+ * đang serialize thì việc sửa phải chờ, và ngược lại. Đọc song song với serialize thì an toàn vì cả hai chỉ đọc.
  */
 public class SlangDictionary implements Serializable {
 
@@ -164,7 +169,7 @@ public class SlangDictionary implements Serializable {
     // ===================== Thay đổi dữ liệu =====================
 
     /** Thêm entry mới với id mới (cho phép trùng tên với entry đã có). */
-    public SlangEntry add(String slang, List<String> meanings) {
+    public synchronized SlangEntry add(String slang, List<String> meanings) {
         SlangEntry entry = new SlangEntry(nextId, slang, meanings); // validate trước khi tăng id
         nextId++;
         insert(entry);
@@ -176,7 +181,7 @@ public class SlangDictionary implements Serializable {
      *
      * @throws NoSuchElementException nếu không có entry nào mang id đó
      */
-    public void replace(SlangEntry updated) {
+    public synchronized void replace(SlangEntry updated) {
         Objects.requireNonNull(updated, "updated");
         SlangEntry old = entries.get(updated.getId());
         if (old == null) {
@@ -188,7 +193,7 @@ public class SlangDictionary implements Serializable {
     }
 
     /** Xoá entry theo id; trả về entry đã xoá, {@code null} nếu không có. */
-    public SlangEntry remove(int id) {
+    public synchronized SlangEntry remove(int id) {
         SlangEntry removed = entries.remove(id);
         if (removed == null) {
             return null;
@@ -205,6 +210,11 @@ public class SlangDictionary implements Serializable {
     }
 
     // ===================== Nội bộ =====================
+
+    /** Serialize như mặc định nhưng giữ khoá, để không có thao tác sửa nào chen vào giữa chừng. */
+    private synchronized void writeObject(ObjectOutputStream out) throws IOException {
+        out.defaultWriteObject();
+    }
 
     private void insert(SlangEntry entry) {
         entries.put(entry.getId(), entry);

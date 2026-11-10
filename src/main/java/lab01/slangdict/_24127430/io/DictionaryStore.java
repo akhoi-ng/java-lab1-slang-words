@@ -1,7 +1,355 @@
 package lab01.slangdict._24127430.io;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputFilter;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectStreamException;
+import java.io.UTFDataFormatException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.zip.CRC32;
+
+import lab01.slangdict._24127430.core.SlangDictionary;
+
 /**
- * Đọc/ghi SlangDictionary đã serialize (data/dictionary.dat), ghi an toàn qua file tạm + rename.
+ * Đọc/ghi {@link SlangDictionary} đã index xuống data/dictionary.dat để lần chạy sau không phải index lại.
+ *
+ * <pre>
+ * Định dạng file:  [int MAGIC "SLNG"] [int FORMAT_VERSION] [long CRC32 của payload] [payload]
+ *                  payload = SlangDictionary qua ObjectOutputStream
+ * </pre>
+ * Header giúp phân biệt nhanh "không phải file của mình / phiên bản cũ" với lỗi đọc thông thường.
+ * CRC32 phát hiện file bị hỏng âm thầm (đổi vài byte nhưng vẫn deserialize được, ví dụ một id trong index
+ * bị sai) — nếu không có nó, từ điển hỏng sẽ được nạp vào và gây lỗi khó hiểu về sau.
+ * <p>
+ * <b>Ghi an toàn:</b> ghi ra file .tmp rồi đổi tên đè lên file thật. Nếu app bị tắt giữa chừng thì
+ * chỉ hỏng file .tmp, file .dat cũ vẫn nguyên.
+ * <p>
+ * <b>Ghi nền:</b> {@link #saveInBackground} trả về ngay; một luồng nền duy nhất vừa serialize vừa ghi đĩa.
+ * Serialize 100.000 slang tốn khoảng 2 giây nên không được làm trên EDT (UI sẽ đứng). Bản ghi vẫn nhất quán
+ * vì SlangDictionary serialize trong khoá {@code synchronized}, cùng khoá với add/replace/remove.
+ * Nhiều lần lưu dồn dập thì chỉ ghi một lần, với trạng thái mới nhất.
  */
-public class DictionaryStore {
+public class DictionaryStore implements AutoCloseable {
+
+    /** "SLNG" theo mã ASCII. */
+    public static final int MAGIC = 0x534C4E47;
+    /** Tăng số này khi đổi cấu trúc dữ liệu để file cũ bị coi là không hợp lệ và build lại. */
+    public static final int FORMAT_VERSION = 1;
+    /** magic (4) + phiên bản (4) + CRC32 (8). */
+    static final int HEADER_BYTES = 16;
+    /** slang.txt gốc nhúng trong jar (Maven copy từ gốc repo khi build). */
+    public static final String BUNDLED_ORIGINAL = "/data/slang.txt";
+
+    /**
+     * Chỉ cho phép đọc lại đúng các class mà từ điển dùng. File .dat lạ chứa class khác sẽ bị từ chối
+     * thay vì được khởi tạo (phòng lỗi bảo mật kinh điển của Java deserialization).
+     * maxarray chặn file hỏng khai báo collection khổng lồ làm tràn bộ nhớ (100k slang chỉ cần cỡ 10^5–10^6).
+     */
+    private static final ObjectInputFilter CLASS_FILTER = ObjectInputFilter.Config.createFilter(
+            "maxarray=20000000;lab01.slangdict._24127430.**;java.util.*;java.lang.*;!*");
+
+    private static final long FLUSH_TIMEOUT_SECONDS = 30;
+    /** Serialize cây (Trie, BK-tree) là đệ quy theo độ sâu: cho luồng ghi stack rộng hơn mặc định cho chắc. */
+    private static final long WRITER_STACK_BYTES = 16L * 1024 * 1024;
+    private static final int MOVE_ATTEMPTS = 5;
+    private static final long MOVE_RETRY_DELAY_MS = 50;
+
+    /** Nguồn dữ liệu đã dùng khi khởi động. */
+    public enum Source {
+        /** Đọc từ dictionary.dat đã index sẵn. */
+        DAT,
+        /** Build từ slang.txt (lần đầu chạy hoặc .dat hỏng). */
+        TEXT
+    }
+
+    /** Kết quả load khi khởi động. */
+    public record LoadResult(SlangDictionary dictionary, Source source, long elapsedNanos) {
+        public long elapsedMillis() {
+            return TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
+        }
+    }
+
+    private final Path dictionaryFile;
+    private final Path externalOriginalFile;
+
+    private final ExecutorService writer = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(null, runnable, "dictionary-writer", WRITER_STACK_BYTES);
+        thread.setDaemon(true); // không giữ JVM sống; lúc thoát app gọi flush() để chờ ghi xong
+        return thread;
+    });
+    private final AtomicLong latestSave = new AtomicLong();
+    private volatile Consumer<IOException> errorListener = DictionaryStore::logError;
+
+    /**
+     * @param dictionaryFile       file .dat để đọc/ghi
+     * @param externalOriginalFile slang.txt đặt cạnh jar; nếu không tồn tại thì dùng bản nhúng trong jar
+     */
+    public DictionaryStore(Path dictionaryFile, Path externalOriginalFile) {
+        this.dictionaryFile = Objects.requireNonNull(dictionaryFile, "dictionaryFile");
+        this.externalOriginalFile = Objects.requireNonNull(externalOriginalFile, "externalOriginalFile");
+    }
+
+    /** Store dùng các đường dẫn chuẩn trong thư mục data/ của ứng dụng. */
+    public static DictionaryStore createDefault() {
+        return new DictionaryStore(AppPaths.dictionaryFile(), AppPaths.externalOriginalFile());
+    }
+
+    public Path dictionaryFile() {
+        return dictionaryFile;
+    }
+
+    // ===================== Đọc/ghi một file =====================
+
+    /** Ghi đồng bộ (chặn luồng gọi cho tới khi ghi xong). */
+    public static void save(SlangDictionary dictionary, Path file) throws IOException {
+        writeAtomically(serialize(dictionary), file);
+    }
+
+    /**
+     * @throws DictionaryFormatException file sai magic/phiên bản, bị cắt cụt hoặc không còn khớp class
+     * @throws IOException               lỗi đọc đĩa (không tồn tại, không có quyền...)
+     */
+    public static SlangDictionary load(Path file) throws IOException {
+        try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
+            return deserialize(in);
+        }
+    }
+
+    static byte[] serialize(SlangDictionary dictionary) throws IOException {
+        ByteArrayOutputStream payload = new ByteArrayOutputStream(1 << 20);
+        try (ObjectOutputStream out = new ObjectOutputStream(payload)) {
+            out.writeObject(dictionary);
+        }
+        return frame(payload.toByteArray());
+    }
+
+    /** Gắn header (magic, phiên bản, CRC32) trước payload. */
+    static byte[] frame(byte[] payload) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(HEADER_BYTES + payload.length);
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            out.writeInt(MAGIC);
+            out.writeInt(FORMAT_VERSION);
+            out.writeLong(crc32(payload));
+            out.write(payload);
+        }
+        return bytes.toByteArray();
+    }
+
+    private static long crc32(byte[] bytes) {
+        CRC32 crc = new CRC32();
+        crc.update(bytes);
+        return crc.getValue();
+    }
+
+    static SlangDictionary deserialize(InputStream in) throws IOException {
+        DataInputStream data = new DataInputStream(in);
+        try {
+            int magic = data.readInt();
+            if (magic != MAGIC) {
+                throw new DictionaryFormatException("Not a dictionary file (magic 0x" + Integer.toHexString(magic) + ")");
+            }
+            int version = data.readInt();
+            if (version != FORMAT_VERSION) {
+                throw new DictionaryFormatException(
+                        "Unsupported format version " + version + " (expected " + FORMAT_VERSION + ")");
+            }
+            long expectedCrc = data.readLong();
+            byte[] payload = data.readAllBytes();
+            if (crc32(payload) != expectedCrc) {
+                throw new DictionaryFormatException("Checksum mismatch: dictionary file is damaged");
+            }
+            ObjectInputStream objects = new ObjectInputStream(new ByteArrayInputStream(payload));
+            objects.setObjectInputFilter(CLASS_FILTER);
+            Object object = objects.readObject();
+            if (!(object instanceof SlangDictionary dictionary)) {
+                throw new DictionaryFormatException("Unexpected object " + object.getClass().getName());
+            }
+            return dictionary;
+        } catch (EOFException | ObjectStreamException | UTFDataFormatException e) {
+            // cắt cụt, dữ liệu rác, serialVersionUID không khớp, class bị filter chặn...
+            throw new DictionaryFormatException("Corrupted dictionary file: " + e, e);
+        } catch (ClassNotFoundException | ClassCastException | LinkageError e) {
+            // LinkageError: tên class trong file bị hỏng chỉ khác hoa/thường (ví dụ "SlangDictionarY");
+            // trên Windows hệ thống file không phân biệt hoa thường nên JVM ném NoClassDefFoundError
+            throw new DictionaryFormatException("Dictionary file does not match this version of the app: " + e, e);
+        } catch (RuntimeException e) {
+            // Dữ liệu rác sau một header hợp lệ có thể làm readObject của collection ném lỗi runtime bất kỳ;
+            // coi như file hỏng để loadOrBuild build lại thay vì làm sập app lúc khởi động.
+            throw new DictionaryFormatException("Corrupted dictionary file: " + e, e);
+        }
+    }
+
+    /** Ghi ra file .tmp cạnh file đích, ép xuống đĩa, rồi đổi tên đè lên file đích. */
+    static void writeAtomically(byte[] bytes, Path file) throws IOException {
+        Path target = file.toAbsolutePath();
+        Files.createDirectories(target.getParent());
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        try (FileChannel channel = FileChannel.open(tmp, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING)) {
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            while (buffer.hasRemaining()) {
+                channel.write(buffer);
+            }
+            channel.force(true); // đảm bảo dữ liệu đã thật sự xuống đĩa trước khi đổi tên
+        }
+        for (int attempt = 1; ; attempt++) {
+            try {
+                moveReplacing(tmp, target);
+                return;
+            } catch (AccessDeniedException e) {
+                // Windows: trình diệt virus/indexer có thể đang mở file .dat trong giây lát → chờ rồi thử lại
+                if (attempt >= MOVE_ATTEMPTS) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(MOVE_RETRY_DELAY_MS * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private static void moveReplacing(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    // ===================== Khởi động / Reset =====================
+
+    /**
+     * Thử đọc dictionary.dat; không có hoặc hỏng thì build từ slang.txt gốc rồi lưu lại .dat.
+     * Lưu .dat thất bại (ví dụ thư mục chỉ đọc) không làm hỏng việc khởi động, chỉ báo qua error listener.
+     *
+     * @throws SlangFormatException slang.txt gốc sai định dạng (kèm số dòng)
+     * @throws IOException          không đọc được slang.txt gốc
+     */
+    public LoadResult loadOrBuild() throws IOException, SlangFormatException {
+        long start = System.nanoTime();
+        if (Files.exists(dictionaryFile)) {
+            try {
+                SlangDictionary dictionary = load(dictionaryFile);
+                return new LoadResult(dictionary, Source.DAT, System.nanoTime() - start);
+            } catch (IOException e) {
+                System.err.println("[DictionaryStore] " + dictionaryFile + " unreadable, rebuilding from text: " + e);
+            }
+        }
+        SlangDictionary dictionary = loadOriginal();
+        long elapsed = System.nanoTime() - start;
+        try {
+            save(dictionary, dictionaryFile);
+        } catch (IOException e) {
+            errorListener.accept(e);
+        }
+        return new LoadResult(dictionary, Source.TEXT, elapsed);
+    }
+
+    /** Build từ điển từ slang.txt gốc: data/slang.txt nếu có, không thì bản nhúng trong jar. Dùng cho Reset. */
+    public SlangDictionary loadOriginal() throws IOException, SlangFormatException {
+        if (Files.isRegularFile(externalOriginalFile)) {
+            return SlangDictionary.build(SlangFileParser.parse(externalOriginalFile));
+        }
+        try (InputStream in = DictionaryStore.class.getResourceAsStream(BUNDLED_ORIGINAL)) {
+            if (in == null) {
+                throw new FileNotFoundException("Bundled resource " + BUNDLED_ORIGINAL + " is missing");
+            }
+            return SlangDictionary.build(SlangFileParser.parse(in));
+        }
+    }
+
+    /** File gốc đang được dùng (để hiển thị/log). */
+    public String originalSourceDescription() {
+        return Files.isRegularFile(externalOriginalFile) ? externalOriginalFile.toString()
+                : "jar:" + BUNDLED_ORIGINAL;
+    }
+
+    // ===================== Ghi nền =====================
+
+    /**
+     * Yêu cầu lưu từ điển; trả về ngay. File sẽ chứa trạng thái của từ điển tại lúc luồng nền chụp lại,
+     * tức là mới nhất có thể (bao gồm mọi thay đổi trước lời gọi này).
+     */
+    public void saveInBackground(SlangDictionary dictionary) {
+        Objects.requireNonNull(dictionary, "dictionary");
+        long ticket = latestSave.incrementAndGet();
+        try {
+            writer.execute(() -> writeIfLatest(dictionary, ticket));
+        } catch (RejectedExecutionException e) {
+            // store đã close (app đang thoát) → báo lỗi thay vì ném exception lên EDT
+            errorListener.accept(new IOException("Store is closed, change was not saved", e));
+        }
+    }
+
+    /** Chạy trên luồng ghi. */
+    private void writeIfLatest(SlangDictionary dictionary, long ticket) {
+        if (ticket != latestSave.get()) {
+            return; // còn yêu cầu mới hơn trong hàng đợi → để lần đó ghi, đỡ serialize thừa
+        }
+        try {
+            writeAtomically(serialize(dictionary), dictionaryFile);
+        } catch (IOException e) {
+            errorListener.accept(e);
+        } catch (RuntimeException e) {
+            // Không để lỗi bất ngờ bị executor nuốt mất một cách im lặng
+            errorListener.accept(new IOException("Unexpected error while saving", e));
+        }
+    }
+
+    /** Chờ mọi lần ghi nền đang chờ hoàn tất (gọi khi thoát app). */
+    public void flush() {
+        try {
+            writer.submit(() -> { }).get(FLUSH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException e) {
+            // đã close: close() đã chờ ghi xong rồi, không còn gì để chờ
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException e) {
+            errorListener.accept(new IOException("Background save did not finish", e));
+        }
+    }
+
+    /** Lỗi khi ghi nền được báo về đây (mặc định in ra stderr; UI sẽ gắn listener hiện thông báo). */
+    public void setErrorListener(Consumer<IOException> listener) {
+        this.errorListener = listener == null ? DictionaryStore::logError : listener;
+    }
+
+    /** flush rồi dừng luồng ghi. */
+    @Override
+    public void close() {
+        flush();
+        writer.shutdown();
+    }
+
+    private static void logError(IOException e) {
+        System.err.println("[DictionaryStore] save failed: " + e);
+    }
 }

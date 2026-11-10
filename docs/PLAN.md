@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong code bước 4 (chưa commit)** → tiếp theo là bước 5 |
-| Test | 30/30 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 7 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 (đã push) → đã đủ 5 ngày, còn thiếu 3 commit nữa để đủ 10 |
+| Bước đang ở | **Xong bước 1–5** → tiếp theo là bước 6 |
+| Test | 48/48 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 9 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → đã đủ 5 ngày, còn thiếu 1 commit nữa để đủ 10 |
 | Thư mục `docs/` | `PLAN.md` được commit; `ARCHITECTURE.md` chỉ dùng ở máy local để học, **không commit** (`docs/` nằm trong `.git/info/exclude`) |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -51,8 +51,8 @@
 | 1 | model | — | ✅ 09/11 |
 | 2 | Parser `slang.txt` | nền | ✅ 09/11 |
 | 3 | Cấu trúc dữ liệu generic (Trie, BKTree, InvertedIndex, Levenshtein) | nền F1, F2 | ✅ 09/11 |
-| 4 | `SlangDictionary` + `Tokenizer` | nền F1–F10 | 🟡 |
-| 5 | `AppPaths` + `DictionaryStore` (.dat) + load khi khởi động | yêu cầu chung 3, 4 | ⬜ |
+| 4 | `SlangDictionary` + `Tokenizer` | nền F1–F10 | ✅ 10/11 |
+| 5 | `AppPaths` + `DictionaryStore` (.dat) + load khi khởi động | yêu cầu chung 3, 4 | ✅ 10/11 |
 | 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ⬜ |
 | 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ⬜ |
 | 8 | `SearchPanel` | **F1, F2** | ⬜ |
@@ -77,9 +77,8 @@ Nếu deadline là 11/11 thì chuyển bớt các bước 10–13 sang ngày 11/
 
 ## 3. Việc cần làm NGAY
 
-1. Commit bước 4.
-2. Khi chuyển sang máy có ARCHITECTURE.md: nhờ agent đối chiếu file đó với code bước 4 (`core/SlangDictionary`, `core/Tokenizer`).
-3. Dùng prompt của **bước 5** (mục 5 bên dưới).
+1. Khi chuyển sang máy có ARCHITECTURE.md: nhờ agent đối chiếu file đó với code bước 4–5 (`core/SlangDictionary`, `core/Tokenizer`, `io/AppPaths`, `io/DictionaryStore`), nhất là phần ghi nền và header CRC32 đã khác so với đặc tả ban đầu.
+2. Dùng prompt của **bước 6** (mục 5 bên dưới).
 
 ---
 
@@ -124,11 +123,12 @@ Các method:
   - tự tạo thư mục nếu chưa có
 - `AppPaths.dictionaryFile()`, `historyFile()`, `settingsFile()`, `externalOriginalFile()` (= `data/slang.txt`)
 - `DictionaryStore`:
-  - `save(SlangDictionary, Path)`: ghi header gồm magic number + số phiên bản định dạng, sau đó `ObjectOutputStream`, ghi vào `*.tmp` rồi `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)`
-  - `load(Path)`: sai magic/phiên bản hoặc lỗi đọc thì ném exception riêng
+  - `save(SlangDictionary, Path)`: ghi header gồm magic number + số phiên bản định dạng **+ CRC32 của payload** (thêm khi làm), sau đó `ObjectOutputStream`, ghi vào `*.tmp` rồi `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)` (thử lại vài lần nếu Windows báo AccessDenied)
+  - `load(Path)`: sai magic/phiên bản/checksum hoặc dữ liệu hỏng thì ném `DictionaryFormatException`; có `ObjectInputFilter` chỉ cho phép class của app + `java.util`/`java.lang`
   - `loadOrBuild()`: thử đọc `.dat`; lỗi thì build từ file gốc (`data/slang.txt` nếu có, không thì `/data/slang.txt` trong jar) rồi lưu `.dat`. Trả về kèm nguồn đã dùng (DAT / TEXT) và thời gian load
   - `loadOriginal()`: dùng cho Reset
-  - Ghi nền an toàn: **serialize ra `byte[]` ngay trên luồng gọi** để có snapshot nhất quán, sau đó mới ghi file trên một `ExecutorService` đơn luồng. Cung cấp `flush()` để chờ ghi xong khi thoát app
+  - Ghi nền an toàn: ~~serialize ra `byte[]` ngay trên luồng gọi~~ → **đã đổi khi làm:** đo được serialize 100k mất ~2 s (UI sẽ đứng sau mỗi add/edit/delete), nên `saveInBackground` trả về ngay, **luồng nền vừa serialize vừa ghi**. Snapshot vẫn nhất quán vì `SlangDictionary.writeObject` và `add/replace/remove` cùng `synchronized` (kiểu `java.util.Vector`). Nhiều lần lưu dồn dập chỉ ghi 1 lần. Cung cấp `flush()` để chờ ghi xong khi thoát app (App gọi qua shutdown hook)
+  - Số đo (máy dev): 7,6k entry: build ~50–100 ms, đọc .dat ~45–110 ms, file 2,3 MB · 100k entry: build ~1,6–3,3 s, đọc .dat ~0,8–1,5 s, serialize ~1,5–2,5 s, file 30 MB
 - `App`: load dữ liệu trước khi hiện giao diện, tạm in log số entry + thời gian (bước 7 sẽ thay bằng màn hình loading)
 - **Test** (dùng `@TempDir`): save rồi load ra đúng dữ liệu; file `.dat` hỏng thì build lại từ text; lần chạy thứ 2 đọc từ DAT
 
