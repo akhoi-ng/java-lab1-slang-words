@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–3, đã commit ngày 09/11** → tiếp theo là bước 4 (ngày 10/11) |
-| Test | 19/19 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 6 commit trên 4 ngày: 04/11, 05/11, 08/11, 09/11 (đã push) + commit PLAN.md ngày 10/11 |
+| Bước đang ở | **Xong code bước 4 (chưa commit)** → tiếp theo là bước 5 |
+| Test | 30/30 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 7 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 (đã push) → đã đủ 5 ngày, còn thiếu 3 commit nữa để đủ 10 |
 | Thư mục `docs/` | `PLAN.md` được commit; `ARCHITECTURE.md` chỉ dùng ở máy local để học, **không commit** (`docs/` nằm trong `.git/info/exclude`) |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -51,7 +51,7 @@
 | 1 | model | — | ✅ 09/11 |
 | 2 | Parser `slang.txt` | nền | ✅ 09/11 |
 | 3 | Cấu trúc dữ liệu generic (Trie, BKTree, InvertedIndex, Levenshtein) | nền F1, F2 | ✅ 09/11 |
-| 4 | `SlangDictionary` + `Tokenizer` | nền F1–F10 | ⬜ |
+| 4 | `SlangDictionary` + `Tokenizer` | nền F1–F10 | 🟡 |
 | 5 | `AppPaths` + `DictionaryStore` (.dat) + load khi khởi động | yêu cầu chung 3, 4 | ⬜ |
 | 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ⬜ |
 | 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ⬜ |
@@ -77,8 +77,9 @@ Nếu deadline là 11/11 thì chuyển bớt các bước 10–13 sang ngày 11/
 
 ## 3. Việc cần làm NGAY
 
-1. Đọc lại [ARCHITECTURE.md](ARCHITECTURE.md) mục 4 để nắm phần cấu trúc dữ liệu.
-2. Dùng prompt của **bước 4** (mục 5 bên dưới).
+1. Commit bước 4.
+2. Khi chuyển sang máy có ARCHITECTURE.md: nhờ agent đối chiếu file đó với code bước 4 (`core/SlangDictionary`, `core/Tokenizer`).
+3. Dùng prompt của **bước 5** (mục 5 bên dưới).
 
 ---
 
