@@ -12,10 +12,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -93,7 +95,7 @@ public class MainFrame extends JFrame {
     private final JLabel statusMessage = new JLabel();
     private String statusMessageKey;
     private Object[] statusMessageArgs = {};
-    private boolean saveErrorDialogShown;
+    private final Set<String> shownSaveErrorDialogs = new HashSet<>();
 
     /**
      * @param exitHandler chạy khi người dùng thoát (nút X hoặc menu Thoát): App lo việc chờ ghi file rồi tắt
@@ -183,12 +185,19 @@ public class MainFrame extends JFrame {
         return currentFeature;
     }
 
-    /** Lỗi ghi .dat từ luồng nền (đã được chuyển về EDT): báo trên thanh trạng thái, dialog chỉ hiện lần đầu. */
+    /** Lỗi ghi dictionary.dat từ luồng nền (đã được chuyển về EDT). */
     public void showSaveError(IOException error) {
+        showSaveError("error.saveFailed", error);
+    }
+
+    /**
+     * Lỗi ghi file từ luồng nền (đã được chuyển về EDT): báo trên thanh trạng thái; dialog của mỗi loại lỗi
+     * ({@code error.saveFailed} cho từ điển, {@code error.historySaveFailed} cho lịch sử) chỉ hiện lần đầu.
+     */
+    public void showSaveError(String dialogKey, IOException error) {
         setStatusMessage("status.saveFailed", error.getMessage());
-        if (!saveErrorDialogShown) {
-            saveErrorDialogShown = true;
-            JOptionPane.showMessageDialog(this, Messages.format("error.saveFailed", error.getMessage()),
+        if (shownSaveErrorDialogs.add(dialogKey)) {
+            JOptionPane.showMessageDialog(this, Messages.format(dialogKey, error.getMessage()),
                     Messages.get("error.title"), JOptionPane.WARNING_MESSAGE);
         }
     }

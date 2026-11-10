@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–7, bước 8 xong code nhưng chưa commit** → commit bước 8 rồi làm bước 9 |
-| Test | 95/95 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 12 commit trên 5 ngày: 04/11, 05/11, 08/11, 09/11, 10/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
+| Bước đang ở | **Xong bước 1–8, bước 9 xong code nhưng chưa commit** → commit bước 9 rồi làm bước 10 |
+| Test | 116/116 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 13 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -55,8 +55,8 @@
 | 5 | `AppPaths` + `DictionaryStore` (.dat) + load khi khởi động | yêu cầu chung 3, 4 | ✅ 10/11 |
 | 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ✅ 10/11 |
 | 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ✅ 10/11 |
-| 8 | `SearchPanel` | **F1, F2** | 🟡 11/11 |
-| 9 | History (service + store + panel) | **F3** | ⬜ |
+| 8 | `SearchPanel` | **F1, F2** | ✅ 11/11 |
+| 9 | History (service + store + panel) | **F3** | 🟡 11/11 |
 | 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ⬜ |
 | 11 | Reset + Random | **F7, F8** | ⬜ |
 | 12 | Quiz (2 loại) | **F9, F10** | ⬜ |
@@ -77,7 +77,7 @@
 ## 3. Việc cần làm NGAY
 
 1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
-2. ~~Dùng prompt của bước 6, 7, 8~~ → xong. Commit bước 8 rồi dùng prompt của **bước 9** (mục 5 bên dưới).
+2. ~~Dùng prompt của bước 6, 7, 8, 9~~ → xong. Commit bước 9 rồi dùng prompt của **bước 10** (mục 5 bên dưới).
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 
 ---
@@ -238,6 +238,19 @@ Các method:
 - `HistoryService`: thêm (mới nhất ở đầu, tối đa 1000 dòng), lấy danh sách, xóa một dòng, xóa tất cả; lưu ngay qua `HistoryStore` (serialize `List<HistoryItem>` vào `data/history.dat`)
 - `HistoryPanel`: bảng Thời gian | Loại | Mode | Query; double-click thì chuyển sang SearchPanel và chạy lại đúng query; nút "Xóa dòng chọn", "Xóa tất cả" (có confirm)
 - Test cho service và store
+
+**Kết quả khi làm (11/11):**
+- Bổ sung so với đặc tả:
+  - **Lưu nền** giống `DictionaryStore`: `HistoryStore.saveInBackground` trả về ngay, một luồng `history-writer` ghi file (tmp rồi đổi tên), nhiều lần lưu dồn dập chỉ ghi lần mới nhất. Khi thoát, App chờ cả `history.dat` lẫn `dictionary.dat` ghi xong.
+  - File `history.dat` có header `HIST` + phiên bản và `ObjectInputFilter` (cho `model`, `java.util`, `java.lang`, `java.time`). Không có CRC vì lịch sử hỏng không làm sai chức năng nào. File hỏng thì bắt đầu với lịch sử rỗng và ghi đè ở lần lưu sau, app vẫn mở được.
+  - Tìm lại **đúng lần mới nhất** (cùng loại, mode, query, không phân biệt hoa thường) thì chỉ cập nhật thời gian, không thêm dòng trùng. Trùng một dòng cũ hơn thì vẫn thêm dòng mới ở đầu.
+  - Xóa được **nhiều dòng một lúc** (Ctrl/Shift để chọn), phím Delete; Enter hoặc bấm đúp để tìm lại; nút "Tìm lại". Xóa xong thì dòng kế tiếp được chọn sẵn, nên nhấn Delete liên tiếp được.
+  - Chưa có lịch sử thì hiện màn hình trống có hướng dẫn (Ctrl+1 / Ctrl+2) thay cho bảng rỗng.
+  - Thời gian định dạng theo ngôn ngữ (mẫu nằm trong `.properties`): `11/11/2026  14:30:05` / `Nov 11, 2026  2:30:05 PM`. Tiếng Anh có số ít/số nhiều ("1 search", "2 searches") nhờ `{0,choice,...}` của MessageFormat.
+  - Lỗi ghi `history.dat` hiện trên thanh trạng thái, dialog cảnh báo riêng (`error.historySaveFailed`) chỉ hiện lần đầu.
+  - Test dùng `testutil/ScratchDir` thay cho `@TempDir`: Windows Defender giữ file vừa ghi làm `@TempDir` dọn dẹp thất bại (đã gặp 2 lần khi chạy cả bộ test).
+- **Điểm nối cho các bước sau:** bước 11 (Reset có checkbox "Xóa cả history") chỉ cần gọi `historyService.clear()`; `HistoryService` đang được tạo trong `App.main` và truyền vào `installScreens`.
+- Đã chạy jar thật: tìm ở F1/F2 → Ctrl+3 thấy lịch sử (mới nhất ở đầu, dòng đầu được chọn sẵn); Enter tìm lại đúng target/mode/query; Delete xóa dòng; tắt app mở lại vẫn còn lịch sử; đổi sang English và theme sáng; xóa hết thì hiện màn hình trống.
 
 ### Bước 10: Add / Edit / Delete (F4, F5, F6)
 

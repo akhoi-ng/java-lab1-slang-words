@@ -81,13 +81,14 @@ Package gốc: `lab01.slangdict._24127430`. Phần tên package không được 
 | `io` | **Đọc/ghi file** | `SlangFileParser`, `SlangFormatException` | ✅ |
 | | | `AppPaths` (thư mục data/ cạnh jar), `DictionaryStore` (.dat), `DictionaryFormatException` | ✅ |
 | | | `SettingsStore` (ngôn ngữ, theme → `settings.properties`) | ✅ |
-| | | `HistoryStore` | ⬜ |
+| | | `HistoryStore` (lịch sử tìm kiếm → `history.dat`, ghi nền) | ✅ |
 | `core` | **Từ điển đã index**: gộp các cấu trúc ở `ds`, giữ chúng luôn đồng bộ | `SlangDictionary`, `Tokenizer` | ✅ |
 | `service` | **Nghiệp vụ** của 10 chức năng | `SearchService`, `SearchOutcome` | ✅ |
-| | | `DictionaryService`, `HistoryService`, `RandomService`, `QuizService` | ⬜ |
+| | | `HistoryService` | ✅ |
+| | | `DictionaryService`, `RandomService`, `QuizService` | ⬜ |
 | `ui` | **Giao diện Swing** | Khung: `MainFrame`, `Sidebar`, `Feature`, `FeatureScreen`, `ThemeManager`, `LoadingWindow`, `SwingLocalizer`, `NumberBadgeIcon`, `AppIcon`, `dialogs/AboutDialog`, `panels/PlaceholderPanel` | ✅ |
-| | | `panels/SearchPanel` (F1, F2) | ✅ |
-| | | `panels/*` (History, Random, Quiz), `dialogs/*` (EntryEditor, Conflict, Reset) | ⬜ |
+| | | `panels/SearchPanel` (F1, F2), `panels/HistoryPanel` (F3) | ✅ |
+| | | `panels/*` (Random, Quiz), `dialogs/*` (EntryEditor, Conflict, Reset) | ⬜ |
 | `i18n` | Chữ song ngữ Anh/Việt, đổi ngay khi đang chạy | `Messages` + `messages_vi/en.properties` | ✅ |
 | `tools` | Sinh 100k slang để benchmark | `BigDataGenerator` | ✅ |
 
@@ -550,6 +551,74 @@ EDT:   ticket vẫn là mới nhất? → đổ vào bảng; không thì bỏ (n
 
 **Test không cần màn hình:** `SearchPanelTest` truyền executor `Runnable::run` (tìm ngay trên luồng gọi) qua constructor package-private, tạo panel trên EDT bằng `invokeAndWait`, rồi chờ EDT xử lý xong `invokeLater` trước khi kiểm tra bảng.
 
+### 4.13 Lịch sử tìm kiếm (bước 9, F3): `HistoryStore`, `HistoryService`, `HistoryPanel`
+
+**Luồng dữ liệu:**
+
+```
+SearchPanel: Enter / nút Tìm / bấm gợi ý
+  → searchListener.accept(HistoryItem)          (App nối: searchPanel.setSearchListener(history::add))
+  → HistoryService.add(item)                    thêm vào ĐẦU danh sách (mới nhất ở đầu), tối đa 1.000 dòng
+       ├─ HistoryStore.saveInBackground(bản sao) luồng "history-writer" ghi history.dat (tmp → đổi tên)
+       └─ báo các listener                       HistoryPanel vẽ lại bảng (kể cả khi đang ẩn)
+
+HistoryPanel: bấm đúp / Enter / nút "Tìm lại"
+  → replayer.accept(item)                       (App nối: item -> searchPanel.search(target, mode, query))
+  → SearchPanel chuyển sang F1 hoặc F2, đặt đúng mode + query rồi tìm như nhấn Enter
+```
+
+**Một lần tìm là gì:** `HistoryItem` là record gồm `target` (slang/definition), `mode`, `query`, `time`. Lưu cả mode để tìm lại ra **đúng** kết quả cũ: `lol` theo Tiền tố khác `lol` theo Gần đúng. Chỉ lần tìm "thật" mới được ghi (tìm-khi-gõ thì không, nếu không lịch sử sẽ đầy "l", "lo", "lol").
+
+**`HistoryService`** (nghiệp vụ, không biết gì về Swing):
+- `ArrayList` mới nhất ở vị trí 0; quá 1.000 dòng thì `subList(1000, size).clear()` bỏ các dòng cũ nhất ở cuối.
+- Tìm lại **đúng lần mới nhất** (cùng loại, mode, query, không phân biệt hoa thường) thì chỉ cập nhật thời gian, tránh nhấn Enter 3 lần ra 3 dòng giống hệt. Trùng một dòng cũ hơn thì vẫn thêm dòng mới, vì đó là một lần tìm mới.
+- `remove(int... indexes)`: varargs, xóa được nhiều dòng một lúc. Xóa **từ vị trí lớn về nhỏ**, vì xóa phần tử ở vị trí 1 trước thì phần tử ở vị trí 3 sẽ dịch thành 2 và xóa nhầm. Vị trí trùng hoặc ngoài phạm vi bị bỏ qua.
+- `items()` trả về `Collections.unmodifiableList(items)`: bên ngoài đọc được mà không sửa lén được (sửa thì `UnsupportedOperationException`), mọi thay đổi bắt buộc đi qua `add/remove/clear` để chắc chắn được lưu và báo listener.
+- Mỗi thay đổi gọi `changed()`: lưu nền + báo listener (mẫu **Observer**, giống `Messages.addListener`). Nhờ vậy `HistoryPanel` không cần "hỏi lại" service, và Reset (bước 11) chỉ cần `history.clear()` là màn hình tự cập nhật.
+- File hỏng thì bắt đầu với lịch sử rỗng: lịch sử không đáng để app không mở được. Lần lưu kế tiếp sẽ ghi đè file hỏng.
+
+**`HistoryStore`** (đọc/ghi file), cùng cách làm với `DictionaryStore` (mục 4.8) nhưng gọn hơn:
+
+| | `dictionary.dat` | `history.dat` |
+|---|---|---|
+| Header | `SLNG` + phiên bản + **CRC32** | `HIST` + phiên bản |
+| Ghi | tmp rồi đổi tên, luồng nền, gộp lần lưu dồn dập | giống hệt (dùng lại `DictionaryStore.writeAtomically`) |
+| `ObjectInputFilter` | app + `java.util` + `java.lang` | `model` + `java.util` + `java.lang` + **`java.time`** |
+| File hỏng | build lại từ `slang.txt` | bắt đầu với lịch sử rỗng |
+
+- Không có CRC vì lịch sử chỉ là thông tin phụ: hỏng một ký tự trong query cũng không làm sai chức năng nào.
+- Cần `java.time` vì `LocalDateTime` được serialize qua class trung gian `java.time.Ser`. Test `classesOutsideTheAllowListAreNeverInstantiated` ghi vào file một class lạ có `readObject` và kiểm tra filter chặn nó **trước khi** nó kịp chạy.
+- Đọc lên là `List<?>` vì **type erasure**: lúc chạy Java không biết đó là `List<HistoryItem>`, nên phải kiểm tra `instanceof HistoryItem` từng phần tử.
+- **Record + serialization:** khi đọc lại, Java gọi đúng constructor của record, nên compact constructor (kiểm tra null) vẫn chạy. File sửa tay cho `query = null` sẽ bị từ chối chứ không lọt vào app.
+- `saveInBackground` nhận **bản sao** (`List.copyOf`) chứ không phải danh sách gốc: luồng ghi đọc danh sách sau, trong lúc EDT có thể đang thêm dòng mới; dùng chung một `ArrayList` giữa hai luồng là lỗi đa luồng.
+
+**`HistoryPanel`** (F3):
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ [3] Lịch sử tìm kiếm                  [Tìm lại] [Xóa dòng chọn] [Xóa tất cả] │
+│ 3 lượt tìm · bấm đúp hoặc nhấn Enter ở một dòng để tìm lại · Delete để xóa │
+│ ┌ Thời gian ───────────┬ Loại ──────┬ Kiểu khớp ┬ Từ khóa ───────────────┐ │
+│ │ 11/11/2026  00:58:55 │ Định nghĩa │ Chính xác │ laugh out lound        │ │
+│ │ 11/11/2026  00:58:01 │ Slang      │ Tiền tố   │ :|                     │ │
+│ └──────────────────────┴────────────┴───────────┴────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+- `AbstractTableModel` **đọc thẳng từ service** (`getRowCount() = service.size()`), không giữ bản sao, nên không bao giờ lệch. Khi service báo thay đổi thì `fireTableDataChanged()`.
+- Cột Loại, Kiểu khớp và Thời gian được dịch **lúc vẽ** (`getValueAt`), nên đổi ngôn ngữ là cả bảng đổi theo. Mẫu thời gian nằm trong `.properties` (`dd/MM/yyyy  HH:mm:ss` / `MMM d, yyyy  h:mm:ss a`) và đi qua `DateTimeFormatter.ofPattern(pattern, locale)`.
+- Tiếng Anh có số ít/số nhiều: `{0,choice,1#1 search|1<{0,number,integer} searches}` (phần `choice` của MessageFormat). Tiếng Việt không cần.
+- Bàn phím: Enter tìm lại, Delete xóa dòng chọn. Enter mặc định của `JTable` là "xuống dòng dưới" (đăng ký ở `WHEN_ANCESTOR_OF_FOCUSED_COMPONENT`); phím gắn ở `WHEN_FOCUSED` được ưu tiên hơn nên ghi đè được.
+- Chọn nhiều dòng (Ctrl/Shift) để xóa một lúc. Xóa xong thì chọn sẵn dòng vừa dịch lên chỗ đó, nên nhấn Delete liên tiếp được. Xóa từng dòng không hỏi lại (chỉ là lịch sử); "Xóa tất cả" thì có hộp xác nhận.
+- Mở màn hình thì dòng mới nhất được chọn sẵn và bảng có focus (`FeatureScreen.onShown`), nên Ctrl+3 rồi Enter là tìm lại ngay lần vừa tìm.
+- Chưa có lịch sử: một `CardLayout` nhỏ bên trong đổi bảng thành màn hình trống có hướng dẫn "tìm ở Ctrl+1 / Ctrl+2".
+- `replay(row)` lấy `HistoryItem` **trước** khi gọi `replayer`, vì tìm lại sẽ ghi thêm một dòng vào đầu lịch sử làm các dòng dịch xuống.
+- **Test được mà không mở dialog:** hộp xác nhận "Xóa tất cả" đi qua field `Predicate<String> confirmer` (mặc định là `JOptionPane`); test thay bằng `message -> true/false`.
+
+**Lỗi ghi `history.dat`:** báo qua `errorListener` → `invokeLater` về EDT → thanh trạng thái màu đỏ. Dialog cảnh báo dùng câu riêng (`error.historySaveFailed`), và mỗi loại lỗi (từ điển / lịch sử) chỉ hiện dialog một lần (`MainFrame.shownSaveErrorDialogs` là một `Set`).
+
+**Thoát app:** `App.closeAll` chờ cả hai luồng ghi (`history.dat`, `dictionary.dat`) xong rồi mới `System.exit`. Shutdown hook cũng gọi `closeAll`, gọi hai lần không sao vì `close()` của executor đã đóng thì bỏ qua.
+
 ---
 
 ## 5. Unit test
@@ -570,9 +639,14 @@ EDT:   ticket vẫn là mới nhất? → đổ vào bảng; không thì bỏ (n
 | `i18n/MessagesTest` | Hai file `.properties` có **đúng cùng bộ key**, không có giá trị rỗng, chuỗi có tham số không chứa dấu `'` đơn lẻ; tiếng Việt đọc đúng UTF-8; đổi ngôn ngữ thì chữ đổi và listener được gọi đúng một lần (chọn lại ngôn ngữ đang dùng thì không gọi); `vi-VN` → `vi`, ngôn ngữ lạ → mặc định; số định dạng theo ngôn ngữ (7.638 / 7,638) |
 | `io/SettingsStoreTest` | Chưa có file thì dùng mặc định; lưu rồi đọc lại đúng (tự tạo thư mục, không sót file `.tmp`); giá trị lạ/rỗng → mặc định; file hỏng không làm app lỗi và vẫn ghi đè được |
 | `ui/panels/SearchPanelTest` | Enter → bảng đúng thứ hạng, dòng đầu được chọn, ghi đúng 1 dòng lịch sử; xóa ô tìm thì xóa kết quả; mở bằng F2 thì sang Định nghĩa mà không gọi ngược MainFrame, bấm tab thì có gọi; mỗi target nhớ mode riêng; EXACT không ra kết quả thì có gợi ý, bấm gợi ý thì tìm; tìm từ lịch sử; đổi ngôn ngữ thì dòng trạng thái và tiêu đề cột đổi theo; vị trí tô từ khóa đúng theo từng mode. Không mở cửa sổ |
+| `io/HistoryStoreTest` | Chưa có file → rỗng; lưu rồi đọc lại đúng mọi field và thứ tự (kể cả `:\|`, UTF-8), không sót `.tmp`; sai magic/phiên bản, cắt cụt, rác, file rỗng đều bị từ chối; class lạ bị filter chặn **trước khi** khởi tạo; danh sách chứa thứ khác `HistoryItem` bị từ chối; 200 lần lưu nền dồn dập ra đúng bản cuối; lỗi ghi nền và lưu sau khi `close` được báo qua listener |
+| `service/HistoryServiceTest` | Mới nhất ở đầu và còn nguyên sau khi "mở lại app"; mỗi thay đổi báo listener đúng một lần; lặp lại lần tìm mới nhất chỉ cập nhật thời gian (khác mode hoặc trùng dòng cũ thì vẫn thêm); giữ tối đa 1.000 dòng, bỏ dòng cũ nhất; xóa nhiều vị trí (bỏ qua trùng/ngoài phạm vi, không có gì để xóa thì không lưu); `clear` cả trên đĩa; `items()` chỉ đọc; file hỏng → rỗng rồi ghi đè; file quá 1.000 dòng bị cắt khi đọc |
+| `ui/panels/HistoryPanelTest` | Màn hình trống khi chưa có lịch sử; cột thời gian/loại/kiểu khớp đúng ngôn ngữ (cả tiêu đề cột, số ít/số nhiều tiếng Anh); tìm lại đúng dòng chọn; xóa nhiều dòng rồi chọn dòng kế tiếp; "Xóa tất cả" hỏi trước (Không → giữ, Có → xóa); **nối dây giống App**: tìm ở SearchPanel → có lịch sử → tìm lại từ lịch sử → SearchPanel sang F2, đúng query, đúng kết quả |
 | `ui/FeatureTest` | Đúng 10 chức năng đánh số 1–10; mọi card đều có chức năng, F4–F7 là hành động; phím tắt không trùng (Ctrl+1 … Ctrl+0); mọi chức năng và nhóm có chữ ở cả hai ngôn ngữ. Không tạo cửa sổ nên chạy được trên máy không có màn hình |
 
-Tổng cộng **95 test** (tới hết bước 8). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối.
+Tổng cộng **116 test** (tới hết bước 9). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống.
+
+Test có ghi file dùng `testutil/ScratchDir` thay cho `@TempDir`: trên Windows, trình diệt virus đôi khi còn giữ file vừa ghi, khiến `@TempDir` dọn dẹp thất bại và đánh fail cả test dù test đúng.
 
 Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 
@@ -583,7 +657,7 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | Khái niệm | Ở đâu |
 |---|---|
 | OOP, đóng gói, immutable | `SlangEntry` (field `final`, `withSlang`/`withMeanings`) |
-| `record`, compact constructor | `SearchResult`, `HistoryItem`, `QuizQuestion` |
+| `record`, compact constructor | `SearchResult`, `HistoryItem`, `QuizQuestion` (record được serialize thì khi đọc lại compact constructor vẫn chạy) |
 | `enum` | `SearchMode`, `SearchTarget`, `QuizType`, `ConflictResolution` |
 | Generics, type parameter | `Trie<V>`, `BKTree<T>`, `InvertedIndex<K,V>` |
 | Bounded type, wildcard | `K extends Comparable<? super K>`, `DistanceMetric<? super T>` |
@@ -592,7 +666,7 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | Collections | `HashMap`, `TreeMap`, `HashSet`, `LinkedHashSet`, `ArrayList`, `ArrayDeque` |
 | Java IO, NIO | `BufferedReader`, `Files.newBufferedReader`, `ObjectOutputStream` (serialize), `FileChannel.force`, `Files.move(ATOMIC_MOVE)` |
 | Exception (checked) | `SlangFormatException`, `DictionaryFormatException extends IOException`, `try-with-resources` |
-| Serialization | `Serializable`, `serialVersionUID`, `readResolve`, `writeObject` tùy biến, `ObjectInputFilter` |
+| Serialization | `Serializable`, `serialVersionUID`, `readResolve`, `writeObject` tùy biến, `ObjectInputFilter` (`DictionaryStore`, `HistoryStore`) |
 | Đa luồng | `synchronized` (`SlangDictionary`, khối `synchronized (dictionary)` trong `SearchService`), `ExecutorService` một luồng (`DictionaryStore`, `SearchPanel`), daemon thread, `AtomicLong`, `volatile`, shutdown hook (`DictionaryStore`, `App`) |
 | `AutoCloseable` | `DictionaryStore.close()` |
 | `Supplier<T>` (functional interface có sẵn), method reference | `SearchService(Supplier<SlangDictionary>)`, `Math::max`, `Map::size` |
@@ -602,7 +676,7 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | Swing, EDT | `SwingUtilities.invokeLater`, `JFrame`, `JWindow`, `JMenuBar`/`JMenu`/`JRadioButtonMenuItem`, phím tắt `KeyStroke` |
 | Layout manager | `BorderLayout` (MainFrame), `CardLayout` (đổi màn hình), `GridBagLayout` (Sidebar, placeholder) |
 | `SwingWorker`, `javax.swing.Timer` | `App.start` (tải dữ liệu ở luồng nền), `LoadingWindow` (hiện sau 300 ms) |
-| Mẫu Observer, callback | `Messages.addListener` (đổi ngôn ngữ), `Sidebar(Consumer<Feature>)`, `DictionaryStore.setErrorListener` |
+| Mẫu Observer, callback | `Messages.addListener` (đổi ngôn ngữ), `HistoryService.addChangeListener`, `Sidebar(Consumer<Feature>)`, `HistoryPanel(…, Consumer<HistoryItem> replayer)`, `DictionaryStore`/`HistoryStore.setErrorListener` |
 | `enum` có field + method | `Feature` (số, nhóm, card, phím tắt), enum lồng `Feature.Section`, `Feature.Card` |
 | `EnumMap`, `CopyOnWriteArrayList` | `MainFrame`, `Sidebar` / danh sách listener của `Messages` |
 | Pattern matching `instanceof` (Java 16+) | `MainFrame.showFeature` (`screen instanceof FeatureScreen fs`) |
@@ -613,6 +687,11 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | Regex (`Pattern`, lookbehind/lookahead, `Pattern.quote`), `Highlighter` | `SearchPanel.matchRanges` (tô từ khóa trong nghĩa) |
 | i18n | `ResourceBundle`, `messages_en/vi.properties`, `MessageFormat`, `Locale` |
 | `Properties` | `SettingsStore` (`data/settings.properties`) |
+| Varargs, type erasure | `HistoryService.remove(int... indexes)`; `HistoryStore.deserialize` kiểm tra `instanceof` từng phần tử của `List<?>` |
+| `Collections.unmodifiableList`, `List.copyOf` | `HistoryService.items()` (xem không sửa), bản sao gửi cho luồng ghi |
+| `java.time`, `DateTimeFormatter` | `HistoryItem.time` (`LocalDateTime`), cột Thời gian của `HistoryPanel` |
+| `MessageFormat` choice | `{0,choice,1#1 search\|1<… searches}` (số ít/số nhiều tiếng Anh) |
+| `MouseAdapter`, `Predicate<T>` | `HistoryPanel` (bấm đúp; hộp xác nhận thay được khi test) |
 
 ---
 

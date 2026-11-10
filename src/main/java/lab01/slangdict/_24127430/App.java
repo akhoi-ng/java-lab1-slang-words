@@ -13,13 +13,16 @@ import javax.swing.SwingWorker;
 
 import lab01.slangdict._24127430.i18n.Messages;
 import lab01.slangdict._24127430.io.DictionaryStore;
+import lab01.slangdict._24127430.io.HistoryStore;
 import lab01.slangdict._24127430.io.SettingsStore;
+import lab01.slangdict._24127430.service.HistoryService;
 import lab01.slangdict._24127430.service.SearchService;
 import lab01.slangdict._24127430.ui.Feature;
 import lab01.slangdict._24127430.ui.LoadingWindow;
 import lab01.slangdict._24127430.ui.MainFrame;
 import lab01.slangdict._24127430.ui.SwingLocalizer;
 import lab01.slangdict._24127430.ui.ThemeManager;
+import lab01.slangdict._24127430.ui.panels.HistoryPanel;
 import lab01.slangdict._24127430.ui.panels.SearchPanel;
 
 /**
@@ -40,7 +43,7 @@ public final class App {
 
     private static MainFrame mainFrame;
     /** Lỗi ghi file xảy ra trước khi MainFrame kịp hiện (ví dụ lúc lưu .dat lần đầu). */
-    private static final List<IOException> pendingSaveErrors = new ArrayList<>();
+    private static final List<Runnable> pendingSaveErrors = new ArrayList<>();
 
     private App() {
     }
@@ -50,24 +53,31 @@ public final class App {
 
         SettingsStore settings;
         DictionaryStore store;
+        HistoryStore historyStore;
+        HistoryService history;
         try {
             settings = SettingsStore.createDefault();
             store = DictionaryStore.createDefault();
+            historyStore = HistoryStore.createDefault();
+            history = new HistoryService(historyStore); // file nhỏ, đọc ngay trên luồng main
         } catch (RuntimeException e) {
             // Ví dụ không tạo được thư mục data/ (ổ đĩa chỉ đọc)
             fatal(e);
             return;
         }
-        // Lỗi ghi .dat đến từ luồng nền → chuyển về EDT rồi mới đụng vào giao diện
-        store.setErrorListener(error -> SwingUtilities.invokeLater(() -> reportSaveError(error)));
+        // Lỗi ghi file đến từ luồng nền → chuyển về EDT rồi mới đụng vào giao diện
+        store.setErrorListener(error -> SwingUtilities.invokeLater(() -> reportSaveError("error.saveFailed", error)));
+        historyStore.setErrorListener(
+                error -> SwingUtilities.invokeLater(() -> reportSaveError("error.historySaveFailed", error)));
         // Lưới an toàn khi JVM bị tắt theo cách khác (Ctrl+C ở console): vẫn chờ ghi xong
-        Runtime.getRuntime().addShutdownHook(new Thread(store::close, "dictionary-flush"));
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> closeAll(store, historyStore), "data-flush"));
 
-        SwingUtilities.invokeLater(() -> start(settings, store));
+        SwingUtilities.invokeLater(() -> start(settings, store, historyStore, history));
     }
 
     /** Chạy trên EDT. */
-    private static void start(SettingsStore settings, DictionaryStore store) {
+    private static void start(SettingsStore settings, DictionaryStore store, HistoryStore historyStore,
+                              HistoryService history) {
         Messages.setLocale(Messages.resolve(settings.language(Messages.DEFAULT_LOCALE)));
         ThemeManager.install(settings.theme());
         SwingLocalizer.install();
@@ -98,42 +108,55 @@ public final class App {
                 System.out.printf("[App] Loaded %,d slang words (%s) in %d ms%n",
                         loaded.dictionary().size(), loaded.source(), loaded.elapsedMillis());
                 mainFrame = new MainFrame(settings, loaded, store.dictionaryFile().getParent(), VERSION,
-                        () -> exit(store));
-                installScreens(mainFrame, loaded);
+                        () -> exit(store, historyStore));
+                installScreens(mainFrame, loaded, history);
                 mainFrame.setVisible(true);
-                pendingSaveErrors.forEach(mainFrame::showSaveError);
+                pendingSaveErrors.forEach(Runnable::run);
                 pendingSaveErrors.clear();
             }
         }.execute();
     }
 
     /** Gắn các màn hình thật vào MainFrame thay cho màn hình tạm (mỗi bước 8–12 thêm một phần). */
-    private static void installScreens(MainFrame frame, DictionaryStore.LoadResult loaded) {
-        // Bước 10–11 sẽ đổi loaded::dictionary thành nguồn "từ điển hiện tại", vì Reset thay object từ điển
+    private static void installScreens(MainFrame frame, DictionaryStore.LoadResult loaded, HistoryService history) {
+        // F1, F2. Bước 10–11 sẽ đổi loaded::dictionary thành nguồn "từ điển hiện tại", vì Reset thay object từ điển
         SearchService searchService = new SearchService(loaded::dictionary);
         SearchPanel searchPanel = new SearchPanel(searchService, frame::showFeature);
+        searchPanel.setSearchListener(history::add); // mỗi lần tìm "thật" (Enter/nút Tìm/gợi ý) → một dòng lịch sử
         frame.setScreen(Feature.Card.SEARCH, searchPanel);
+
+        // F3: bấm đúp một dòng → sang màn hình Search đúng F1/F2 và tìm lại
+        HistoryPanel historyPanel = new HistoryPanel(history,
+                item -> searchPanel.search(item.target(), item.mode(), item.query()));
+        frame.setScreen(Feature.Card.HISTORY, historyPanel);
     }
 
-    private static void reportSaveError(IOException error) {
+    /** Chạy trên EDT. {@code dialogKey}: chữ của dialog cảnh báo, khác nhau cho từ điển và lịch sử. */
+    private static void reportSaveError(String dialogKey, IOException error) {
         System.err.println("[App] save failed: " + error);
         if (mainFrame != null) {
-            mainFrame.showSaveError(error);
+            mainFrame.showSaveError(dialogKey, error);
         } else {
-            pendingSaveErrors.add(error);
+            pendingSaveErrors.add(() -> mainFrame.showSaveError(dialogKey, error));
         }
     }
 
     /** Ẩn cửa sổ ngay để người dùng không phải chờ, phần chờ ghi file chạy ở luồng riêng. */
-    private static void exit(DictionaryStore store) {
+    private static void exit(DictionaryStore store, HistoryStore historyStore) {
         if (mainFrame != null) {
             mainFrame.dispose();
         }
         Thread exiter = new Thread(() -> {
-            store.close(); // chờ lần ghi .dat cuối cùng
+            closeAll(store, historyStore);
             System.exit(0);
         }, "app-exit");
         exiter.start();
+    }
+
+    /** Chờ lần ghi .dat và history.dat cuối cùng rồi dừng các luồng ghi. Gọi nhiều lần cũng không sao. */
+    private static void closeAll(DictionaryStore store, HistoryStore historyStore) {
+        historyStore.close();
+        store.close();
     }
 
     /** Lỗi không thể tiếp tục (không tải được dữ liệu): báo rồi thoát. */
