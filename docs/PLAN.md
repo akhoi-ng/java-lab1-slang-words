@@ -59,7 +59,7 @@
 | 9 | History (service + store + panel) | **F3** | ✅ 11/11 |
 | 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ✅ 11/11 |
 | 11 | Reset + Random | **F7, F8** | ✅ 11/11 |
-| 12 | Quiz (2 loại) | **F9, F10** | 🟡 11/11 |
+| 12 | Quiz (2 loại) | **F9, F10** | ✅ 11/11 |
 | 13 | README, file tự chấm điểm, rà lại, jar cuối | nộp bài | ⬜ |
 
 ### Lịch commit đề xuất
