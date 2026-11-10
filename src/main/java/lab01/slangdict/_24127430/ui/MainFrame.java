@@ -92,6 +92,8 @@ public class MainFrame extends JFrame {
             KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK);
 
     private final JLabel statusInfo = new JLabel();
+    /** Số slang hiện trên thanh trạng thái; đổi theo mỗi lần thêm/xóa ({@link #showDictionarySize}). */
+    private int dictionarySize;
     private final JLabel statusMessage = new JLabel();
     private String statusMessageKey;
     private Object[] statusMessageArgs = {};
@@ -106,6 +108,7 @@ public class MainFrame extends JFrame {
         this.loaded = loaded;
         this.dataDir = dataDir;
         this.version = version;
+        this.dictionarySize = loaded.dictionary().size();
 
         setIconImages(AppIcon.images());
         setJMenuBar(buildMenuBar());
@@ -183,6 +186,12 @@ public class MainFrame extends JFrame {
 
     public Feature currentFeature() {
         return currentFeature;
+    }
+
+    /** Cập nhật số slang trên thanh trạng thái (App gọi sau mỗi lần từ điển thay đổi). */
+    public void showDictionarySize(int size) {
+        dictionarySize = size;
+        updateStatusInfo();
     }
 
     /** Lỗi ghi dictionary.dat từ luồng nền (đã được chuyển về EDT). */
@@ -324,11 +333,15 @@ public class MainFrame extends JFrame {
         helpMenu.setText(Messages.get("menu.help"));
         aboutItem.setText(Messages.get("menu.help.about") + "…");
 
-        String sourceKey = loaded.source() == DictionaryStore.Source.DAT ? "status.loaded.dat" : "status.loaded.text";
-        statusInfo.setText(Messages.format(sourceKey, loaded.dictionary().size(), loaded.elapsedMillis()));
+        updateStatusInfo();
         statusInfo.setToolTipText(Messages.format("status.dataDir", dataDir));
         statusMessage.setText(statusMessageKey == null ? "" : Messages.format(statusMessageKey, statusMessageArgs));
         updateTitle();
+    }
+
+    private void updateStatusInfo() {
+        String sourceKey = loaded.source() == DictionaryStore.Source.DAT ? "status.loaded.dat" : "status.loaded.text";
+        statusInfo.setText(Messages.format(sourceKey, dictionarySize, loaded.elapsedMillis()));
     }
 
     private void updateTitle() {

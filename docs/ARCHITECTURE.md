@@ -85,10 +85,12 @@ Package gốc: `lab01.slangdict._24127430`. Phần tên package không được 
 | `core` | **Từ điển đã index**: gộp các cấu trúc ở `ds`, giữ chúng luôn đồng bộ | `SlangDictionary`, `Tokenizer` | ✅ |
 | `service` | **Nghiệp vụ** của 10 chức năng | `SearchService`, `SearchOutcome` | ✅ |
 | | | `HistoryService` | ✅ |
-| | | `DictionaryService`, `RandomService`, `QuizService` | ⬜ |
+| | | `DictionaryService`, `ConflictResolver`, `ChangeResult` (thêm/sửa/xóa) | ✅ |
+| | | `RandomService`, `QuizService` | ⬜ |
 | `ui` | **Giao diện Swing** | Khung: `MainFrame`, `Sidebar`, `Feature`, `FeatureScreen`, `ThemeManager`, `LoadingWindow`, `SwingLocalizer`, `NumberBadgeIcon`, `AppIcon`, `dialogs/AboutDialog`, `panels/PlaceholderPanel` | ✅ |
 | | | `panels/SearchPanel` (F1, F2), `panels/HistoryPanel` (F3) | ✅ |
-| | | `panels/*` (Random, Quiz), `dialogs/*` (EntryEditor, Conflict, Reset) | ⬜ |
+| | | `panels/EntryActions`, `dialogs/EntryEditorDialog`, `dialogs/ConflictDialog` (F4, F5, F6) | ✅ |
+| | | `panels/*` (Random, Quiz), `dialogs/ResetDialog` | ⬜ |
 | `i18n` | Chữ song ngữ Anh/Việt, đổi ngay khi đang chạy | `Messages` + `messages_vi/en.properties` | ✅ |
 | `tools` | Sinh 100k slang để benchmark | `BigDataGenerator` | ✅ |
 
@@ -334,8 +336,9 @@ có dictionary.dat? ──có──► load ──OK──► dùng luôn (Sourc
 **Ghi nền (`saveInBackground`):**
 - Đo thực tế: serialize 100k slang mất khoảng 2 giây. Nếu ghi trên EDT thì mỗi lần add/edit/delete giao diện sẽ đứng 2 giây. Vì vậy có **một** luồng nền riêng (`ExecutorService` một luồng) lo việc serialize và ghi; `saveInBackground` trả về ngay.
 - **Gộp các lần lưu dồn dập:** mỗi yêu cầu nhận một số thứ tự (`AtomicLong`). Khi đến lượt chạy, nếu đã có yêu cầu mới hơn thì bỏ qua và để lần mới nhất ghi. Xóa 10 entry liên tiếp chỉ ghi 1–2 lần chứ không phải 10.
+- **Hoãn ghi 1,5 s (thêm ở bước 10):** trong lúc serialize, luồng ghi giữ khóa của từ điển. Nếu ghi ngay sau mỗi lần sửa thì lần tìm lại ngay sau đó (để hiện entry vừa sửa) phải đứng chờ khoảng 2 s ở bản 100k. Vì vậy app dùng `ScheduledThreadPoolExecutor`: mỗi yêu cầu hẹn ghi sau 1,5 s, yêu cầu mới thì dời giờ (debounce). Lần tìm lại xong trước, việc ghi rơi vào lúc người dùng đang đọc kết quả. Constructor 2 tham số vẫn ghi ngay (test dùng).
 - Lỗi ghi được báo qua `errorListener` (bước 7 sẽ cho hiện thông báo trên UI) thay vì làm sập app.
-- Khi thoát, shutdown hook gọi `close()` → `flush()` để chờ lần ghi cuối hoàn tất.
+- Khi thoát, shutdown hook gọi `close()` → `flush()`: **ghi ngay** lần đang hẹn giờ (không chờ hết 1,5 s) rồi chờ ghi xong.
 
 **Bảo mật khi đọc (`ObjectInputFilter`):** deserialize trong Java có thể khởi tạo bất kỳ class nào ghi trong file, đây là lỗ hổng kinh điển. Filter chỉ cho phép class của app, `java.util.*` và `java.lang.*`, đồng thời giới hạn kích thước mảng để file hỏng không làm tràn bộ nhớ.
 
@@ -546,7 +549,7 @@ EDT:   ticket vẫn là mới nhất? → đổ vào bảng; không thì bỏ (n
 
 - Query nặng nhất ở bản 100k (definition chứa `e`, ~0,2 s) không làm đứng giao diện; nếu lâu hơn 120 ms thì dòng trạng thái hiện "Đang tìm…".
 - `generation` là `AtomicLong`, vì được đọc ở cả hai luồng. Nhờ nó, kết quả của lần tìm cũ về muộn không bao giờ đè lên kết quả mới.
-- **Khóa:** add/edit/delete (bước 10) chạy trên EDT, còn tìm kiếm chạy trên luồng "search". `SearchService` vì vậy đọc index bên trong `synchronized (dictionary)`, cùng khóa với `add/replace/remove` của `SlangDictionary`. Nếu không có khóa, luồng tìm có thể đọc `HashMap` đúng lúc EDT đang sửa dở (`ConcurrentModificationException` hoặc kết quả sai).
+- **Khóa:** add/edit/delete (bước 10, mục 4.14) chạy trên EDT, còn tìm kiếm chạy trên luồng "search". `SearchService` vì vậy đọc index bên trong `synchronized (dictionary)`, cùng khóa với `add/replace/remove` của `SlangDictionary`. Nếu không có khóa, luồng tìm có thể đọc `HashMap` đúng lúc EDT đang sửa dở (`ConcurrentModificationException` hoặc kết quả sai).
 - Luồng "search" là *daemon thread*, nên không giữ JVM lại khi thoát app.
 
 **Test không cần màn hình:** `SearchPanelTest` truyền executor `Runnable::run` (tìm ngay trên luồng gọi) qua constructor package-private, tạo panel trên EDT bằng `invokeAndWait`, rồi chờ EDT xử lý xong `invokeLater` trước khi kiểm tra bảng.
@@ -619,6 +622,60 @@ HistoryPanel: bấm đúp / Enter / nút "Tìm lại"
 
 **Thoát app:** `App.closeAll` chờ cả hai luồng ghi (`history.dat`, `dictionary.dat`) xong rồi mới `System.exit`. Shutdown hook cũng gọi `closeAll`, gọi hai lần không sao vì `close()` của executor đã đóng thì bỏ qua.
 
+### 4.14 Thêm / Sửa / Xóa (bước 10, F4–F6): `DictionaryService`, `EntryActions`, hai dialog
+
+**Luồng một lần thêm:**
+
+```
+Ctrl+4 / Sidebar / nút Thêm
+  → EntryActions.add()
+  → EntryEditorDialog (tên + bảng nghĩa)  ── Hủy ──► thôi
+  → DictionaryService.add(tên, nghĩa, resolver)
+       ├─ tên chưa có ──────────────────► SlangDictionary.add  (cập nhật MỌI index)
+       └─ tên đã có ─► resolver = ConflictDialog: Ghi đè / Thêm nghĩa / Tạo bản mới / Quay lại sửa
+                                                                     └─► mở lại EntryEditorDialog với dữ liệu cũ
+  → DictionaryStore.saveInBackground (ghi .dat sau 1,5 s) + báo listener (thanh trạng thái: số slang)
+  → SearchPanel.showChange: "✓ Đã thêm …", tìm lại, chọn sẵn entry vừa thêm
+```
+
+**3 lựa chọn khi trùng tên** (so sánh không phân biệt hoa thường, giống tìm EXACT):
+
+| | Thêm tên đã có (F4) | Đổi tên thành tên của entry khác (F5) |
+|---|---|---|
+| Ghi đè (`OVERWRITE`) | thay toàn bộ nghĩa của entry đích, giữ id | xóa entry đích, giữ entry đang sửa |
+| Thêm nghĩa (`ADD_MEANING`) | nối nghĩa mới vào entry đích, bỏ nghĩa đã có | gộp nghĩa vào entry đích, xóa entry đang sửa |
+| Tạo bản mới (`NEW_ENTRY`) | thêm entry riêng cùng tên (đề gọi là "duplicate") | giữ cả hai |
+
+Có nhiều entry cùng tên thì người dùng chọn **entry đích** trong danh sách. Đây là lý do `SlangEntry` có id riêng (mục 4.2): hai entry "gg" khác nhau vẫn phân biệt được. Sửa mà không đổi tên (chỉ đổi nghĩa hay hoa/thường) thì không hỏi.
+
+**Tách nghiệp vụ khỏi giao diện:**
+- `DictionaryService` không import gì của Swing. Khi trùng tên nó gọi `ConflictResolver`, một **functional interface**: app truyền hàm mở `ConflictDialog`, test truyền lambda (`conflict -> Optional.of(new Decision(OVERWRITE, …))`). Đây là **mẫu Strategy**: cách quyết định được truyền từ ngoài vào.
+- Kết quả trả về là record `ChangeResult` (`CHANGED` / `UNCHANGED` / `CANCELLED`, lựa chọn đã dùng, entry sau khi đổi, các entry bị xóa). `EntryActions` dựa vào đó chọn câu thông báo và entry cần chọn sẵn.
+- `DictionaryService.validate` dùng chung cho dialog (báo lỗi màu đỏ ngay trong dialog) và service (ném `IllegalArgumentException` nếu ai gọi sai). Tên không được chứa `` ` ``, nghĩa không được chứa `|`, vì đó là hai ký tự ngăn cách trong `slang.txt`; tên thì được chứa `|` vì file gốc có slang `:|`.
+- Chuẩn hóa nghĩa bằng `LinkedHashMap<khóa chữ thường, nghĩa>`: bỏ trùng không phân biệt hoa thường mà **giữ thứ tự** và cách viết của lần xuất hiện đầu.
+- Các bước sửa của một thao tác (ví dụ OVERWRITE khi đổi tên = xóa entry đích rồi thay entry đang sửa) nằm trong `synchronized (dict)`, nên luồng tìm kiếm không bao giờ thấy trạng thái nửa chừng.
+- `DictionaryService` giữ **từ điển hiện tại** (`volatile`). `SearchService` lấy qua `dictionaryService::current`, nên Reset (bước 11) chỉ cần thay field này.
+
+**`EntryEditorDialog`:**
+- Bảng nghĩa là `JTable` 1 cột sửa trực tiếp (cột # tự tính lại khi xóa/đổi chỗ). Nút Thêm nghĩa / Xóa nghĩa / Lên / Xuống; phím Insert, Delete, Alt+↑/↓.
+- `terminateEditOnFocusLost` + `stopCellEditing()` trước khi kiểm tra: bấm Lưu khi một ô còn đang gõ dở thì chữ đó vẫn được tính (lỗi kinh điển của `JTable` nếu quên).
+- Đang gõ tên thì báo trước "⚠ Đã có N slang tên này" (đếm qua `countOthersNamed`, không tính chính entry đang sửa).
+- Enter ở ô tên: chưa có nghĩa thì chuyển xuống ô nghĩa, có rồi thì lưu. Ctrl+Enter lưu, Esc hủy (khi không có ô nào đang sửa dở: Esc lúc đó chỉ hủy ô đó, vì phím gắn ở component có focus được ưu tiên hơn phím gắn ở cửa sổ).
+- Phần nội dung là class `Form extends JPanel`, `JDialog` chỉ bọc bên ngoài, nên test được mà không mở cửa sổ.
+
+**`ConflictDialog`:** mỗi lựa chọn là một nút lớn có mô tả (bấm là xong, không phải chọn rồi bấm OK); chữ mô tả khác nhau giữa thêm và sửa. Focus mặc định **không** đặt ở "Ghi đè": lỡ nhấn Enter thì không mất dữ liệu. Tên/nghĩa được thoát ký tự HTML (`<3`, `&` hiện đúng nguyên văn).
+
+**`EntryActions`** (nối dialog ↔ service ↔ màn hình Search):
+- Sửa/Xóa luôn làm trên slang đang chọn ở màn hình Search; đang ở màn hình khác thì chuyển về; chưa chọn thì hiện hướng dẫn. Entry được đọc lại theo id trước khi sửa (bảng có thể đang hiện bản cũ).
+- Thêm: tên điền sẵn là chữ đang gõ ở ô tìm slang, vì trường hợp hay gặp là "tìm không thấy → thêm luôn".
+- Dialog đi qua interface `Prompts`; `EntryActionsTest` thay bằng câu trả lời soạn sẵn và chạy trọn luồng thêm/sửa/xóa mà không mở cửa sổ nào.
+
+**`SearchPanel` sau khi dữ liệu đổi:** `showChange(entry, …)` tìm lại lần tìm đang hiện và chọn sẵn entry theo **id**; nếu entry không còn khớp (ví dụ vừa đổi tên) thì tự tìm theo tên mới. `showRemoval` chọn dòng ở đúng chỗ vừa xóa. Dòng chọn được truyền kèm yêu cầu tìm (record `Selection`) chứ không để trong field, vì kết quả về trễ trên luồng khác. Thông báo lưu dạng key + tham số nên đổi ngôn ngữ vẫn dịch lại được, và tự mất khi người dùng tìm tiếp.
+
+**Thời gian tìm hiển thị:** `SearchService` bắt đầu đo **sau khi** lấy được khóa từ điển. Nếu luồng ghi `.dat` đang giữ khóa thì lần tìm phải chờ, nhưng con số trên màn hình vẫn là thời gian tìm thật (test `elapsedTimeDoesNotCountWaitingForTheSaveLock`).
+
+**Giới hạn còn lại (chỉ ở 100k):** nếu đúng lúc luồng ghi đang serialize (~2 s) mà người dùng thêm/sửa/xóa tiếp, thao tác đó chờ ghi xong. Muốn bỏ hẳn thì phải ghi nhật ký thay đổi (journal) thay vì serialize cả từ điển mỗi lần.
+
 ---
 
 ## 5. Unit test
@@ -642,9 +699,14 @@ HistoryPanel: bấm đúp / Enter / nút "Tìm lại"
 | `io/HistoryStoreTest` | Chưa có file → rỗng; lưu rồi đọc lại đúng mọi field và thứ tự (kể cả `:\|`, UTF-8), không sót `.tmp`; sai magic/phiên bản, cắt cụt, rác, file rỗng đều bị từ chối; class lạ bị filter chặn **trước khi** khởi tạo; danh sách chứa thứ khác `HistoryItem` bị từ chối; 200 lần lưu nền dồn dập ra đúng bản cuối; lỗi ghi nền và lưu sau khi `close` được báo qua listener |
 | `service/HistoryServiceTest` | Mới nhất ở đầu và còn nguyên sau khi "mở lại app"; mỗi thay đổi báo listener đúng một lần; lặp lại lần tìm mới nhất chỉ cập nhật thời gian (khác mode hoặc trùng dòng cũ thì vẫn thêm); giữ tối đa 1.000 dòng, bỏ dòng cũ nhất; xóa nhiều vị trí (bỏ qua trùng/ngoài phạm vi, không có gì để xóa thì không lưu); `clear` cả trên đĩa; `items()` chỉ đọc; file hỏng → rỗng rồi ghi đè; file quá 1.000 dòng bị cắt khi đọc |
 | `ui/panels/HistoryPanelTest` | Màn hình trống khi chưa có lịch sử; cột thời gian/loại/kiểu khớp đúng ngôn ngữ (cả tiêu đề cột, số ít/số nhiều tiếng Anh); tìm lại đúng dòng chọn; xóa nhiều dòng rồi chọn dòng kế tiếp; "Xóa tất cả" hỏi trước (Không → giữ, Có → xóa); **nối dây giống App**: tìm ở SearchPanel → có lịch sử → tìm lại từ lịch sử → SearchPanel sang F2, đúng query, đúng kết quả |
+| `service/DictionaryServiceTest` | Thêm tên mới không hỏi và có lưu xuống `.dat`; trùng tên thì hỏi với đúng các entry cùng tên; **3 lựa chọn × thêm/đổi tên** (ghi đè giữ id, thêm nghĩa bỏ nghĩa đã có, tạo bản mới; đổi tên ghi đè xóa entry kia, gộp nghĩa xóa entry đang sửa); nhiều entry cùng tên thì tác động đúng entry được chọn; hủy thì không đổi gì; sửa không đổi tên thì không hỏi; không đổi gì thì không lưu; index tên và index nghĩa được cập nhật (tìm EXACT/FUZZY sau khi đổi tên); dữ liệu sai bị từ chối; resolver không được chọn entry lạ |
+| `ui/panels/EntryActionsTest` | Trọn luồng như trong app với dialog giả: thêm → màn hình Search hiện và chọn sẵn entry mới, có thông báo; tên điền sẵn từ ô tìm; "Quay lại sửa" mở lại dialog với dữ liệu cũ; thêm nghĩa giữ nguyên lần tìm đang xem; đổi tên ra khỏi kết quả thì tự tìm tên mới; đổi tên trùng → ghi đè; xóa hỏi trước, chọn dòng kế tiếp, đã lưu xuống `.dat`; chưa chọn gì thì hiện hướng dẫn |
+| `ui/dialogs/EntryDialogsTest` | Dialog nhập: dòng nghĩa trống sẵn khi thêm, báo đúng lỗi (tên trống, không có nghĩa, nghĩa chứa `\|`) và đưa con trỏ tới dòng sai, cảnh báo trùng tên theo chữ đang gõ (sửa mà không đổi tên thì không báo), thêm/xóa/lên/xuống nghĩa, ô đang gõ dở vẫn được tính khi Lưu. Dialog trùng tên: trả về đúng lựa chọn + entry đích, chữ mô tả theo thêm/sửa, thoát ký tự HTML |
 | `ui/FeatureTest` | Đúng 10 chức năng đánh số 1–10; mọi card đều có chức năng, F4–F7 là hành động; phím tắt không trùng (Ctrl+1 … Ctrl+0); mọi chức năng và nhóm có chữ ở cả hai ngôn ngữ. Không tạo cửa sổ nên chạy được trên máy không có màn hình |
 
-Tổng cộng **116 test** (tới hết bước 9). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống.
+Bước 10 cũng thêm vào `DictionaryStoreTest` (hoãn ghi thì chưa ghi ngay nhưng hết giờ là ghi; `close()` ghi ngay lần đang hẹn giờ 60 s) và `SearchServiceTest` (thời gian tìm không tính lúc chờ khóa).
+
+Tổng cộng **167 test** (tới hết bước 10). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống; bước 10 chạy jar thật ở 7,6k và 100k (thêm, thêm trùng → thêm nghĩa / tạo bản mới, đổi tên trùng 2 mục → quay lại, xóa, theme sáng + English) rồi đọc lại `dictionary.dat` sau khi thoát.
 
 Test có ghi file dùng `testutil/ScratchDir` thay cho `@TempDir`: trên Windows, trình diệt virus đôi khi còn giữ file vừa ghi, khiến `@TempDir` dọn dẹp thất bại và đánh fail cả test dù test đúng.
 
@@ -692,6 +754,12 @@ Chạy bằng `.\mvnw.cmd test` hoặc bấm ▶ cạnh tên test trong VS Code.
 | `java.time`, `DateTimeFormatter` | `HistoryItem.time` (`LocalDateTime`), cột Thời gian của `HistoryPanel` |
 | `MessageFormat` choice | `{0,choice,1#1 search\|1<… searches}` (số ít/số nhiều tiếng Anh) |
 | `MouseAdapter`, `Predicate<T>` | `HistoryPanel` (bấm đúp; hộp xác nhận thay được khi test) |
+| Functional interface tự định nghĩa, mẫu Strategy | `ConflictResolver` (app truyền dialog, test truyền lambda), `EntryActions.Prompts` |
+| Record lồng trong interface, `Optional<T>` | `ConflictResolver.Conflict` / `Decision`; `Optional.empty()` = người dùng hủy |
+| `switch` trên enum | `DictionaryService.add/edit` (3 lựa chọn `ConflictResolution`) |
+| `LinkedHashMap.putIfAbsent` | `DictionaryService.cleanMeanings` (bỏ trùng mà giữ thứ tự) |
+| `ScheduledThreadPoolExecutor` (debounce) | `DictionaryStore.saveInBackground` hoãn ghi 1,5 s |
+| `JDialog` modal, `JTable` sửa trực tiếp, `TableCellEditor` | `EntryEditorDialog` (bảng nghĩa), `ConflictDialog` |
 
 ---
 

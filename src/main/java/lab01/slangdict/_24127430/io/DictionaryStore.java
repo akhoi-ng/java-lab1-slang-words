@@ -24,12 +24,12 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.zip.CRC32;
 
@@ -52,7 +52,8 @@ import lab01.slangdict._24127430.core.SlangDictionary;
  * <b>Ghi nền:</b> {@link #saveInBackground} trả về ngay; một luồng nền duy nhất vừa serialize vừa ghi đĩa.
  * Serialize 100.000 slang tốn khoảng 2 giây nên không được làm trên EDT (UI sẽ đứng). Bản ghi vẫn nhất quán
  * vì SlangDictionary serialize trong khoá {@code synchronized}, cùng khoá với add/replace/remove.
- * Nhiều lần lưu dồn dập thì chỉ ghi một lần, với trạng thái mới nhất.
+ * Nhiều lần lưu dồn dập thì chỉ ghi một lần, với trạng thái mới nhất. App dùng bản có hoãn
+ * ({@link #DEFAULT_SAVE_DELAY_MS}) để việc giữ khoá khi serialize không rơi đúng lúc tìm lại sau khi sửa.
  */
 public class DictionaryStore implements AutoCloseable {
 
@@ -94,29 +95,52 @@ public class DictionaryStore implements AutoCloseable {
         }
     }
 
+    /**
+     * App chờ chừng này sau lần sửa cuối rồi mới ghi nền. Lúc serialize, luồng ghi giữ khóa của từ điển (100k slang:
+     * khoảng 2 s); nếu ghi ngay thì lần tìm lại ngay sau khi thêm/sửa/xóa phải đứng chờ khóa. Hoãn lại thì lần tìm đó
+     * xong trước, việc ghi rơi vào lúc người dùng đang đọc kết quả. Thoát app vẫn ghi ngay ({@link #flush}).
+     */
+    public static final long DEFAULT_SAVE_DELAY_MS = 1500;
+
     private final Path dictionaryFile;
     private final Path externalOriginalFile;
+    private final long saveDelayMillis;
 
-    private final ExecutorService writer = Executors.newSingleThreadExecutor(runnable -> {
+    private final ScheduledThreadPoolExecutor writer = new ScheduledThreadPoolExecutor(1, runnable -> {
         Thread thread = new Thread(null, runnable, "dictionary-writer", WRITER_STACK_BYTES);
         thread.setDaemon(true); // không giữ JVM sống; lúc thoát app gọi flush() để chờ ghi xong
         return thread;
     });
     private final AtomicLong latestSave = new AtomicLong();
+    /** Từ điển đang chờ được ghi (null nếu không có gì chờ). */
+    private final AtomicReference<SlangDictionary> pending = new AtomicReference<>();
     private volatile Consumer<IOException> errorListener = DictionaryStore::logError;
 
     /**
+     * Store ghi nền ngay khi được yêu cầu (không hoãn).
+     *
      * @param dictionaryFile       file .dat để đọc/ghi
      * @param externalOriginalFile slang.txt đặt cạnh jar; nếu không tồn tại thì dùng bản nhúng trong jar
      */
     public DictionaryStore(Path dictionaryFile, Path externalOriginalFile) {
-        this.dictionaryFile = Objects.requireNonNull(dictionaryFile, "dictionaryFile");
-        this.externalOriginalFile = Objects.requireNonNull(externalOriginalFile, "externalOriginalFile");
+        this(dictionaryFile, externalOriginalFile, 0);
     }
 
-    /** Store dùng các đường dẫn chuẩn trong thư mục data/ của ứng dụng. */
+    /** @param saveDelayMillis {@link #saveInBackground} chờ chừng này (tính từ lần yêu cầu cuối) rồi mới ghi */
+    public DictionaryStore(Path dictionaryFile, Path externalOriginalFile, long saveDelayMillis) {
+        this.dictionaryFile = Objects.requireNonNull(dictionaryFile, "dictionaryFile");
+        this.externalOriginalFile = Objects.requireNonNull(externalOriginalFile, "externalOriginalFile");
+        if (saveDelayMillis < 0) {
+            throw new IllegalArgumentException("saveDelayMillis must be >= 0");
+        }
+        this.saveDelayMillis = saveDelayMillis;
+        // close() đã flush rồi: các lần ghi hẹn giờ còn lại không cần chạy nữa
+        writer.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+    }
+
+    /** Store dùng các đường dẫn chuẩn trong thư mục data/ của ứng dụng, ghi nền hoãn {@value #DEFAULT_SAVE_DELAY_MS} ms. */
     public static DictionaryStore createDefault() {
-        return new DictionaryStore(AppPaths.dictionaryFile(), AppPaths.externalOriginalFile());
+        return new DictionaryStore(AppPaths.dictionaryFile(), AppPaths.externalOriginalFile(), DEFAULT_SAVE_DELAY_MS);
     }
 
     public Path dictionaryFile() {
@@ -296,13 +320,15 @@ public class DictionaryStore implements AutoCloseable {
 
     /**
      * Yêu cầu lưu từ điển; trả về ngay. File sẽ chứa trạng thái của từ điển tại lúc luồng nền chụp lại,
-     * tức là mới nhất có thể (bao gồm mọi thay đổi trước lời gọi này).
+     * tức là mới nhất có thể (bao gồm mọi thay đổi trước lời gọi này). Store có hoãn thì mỗi lần yêu cầu mới
+     * lại dời giờ ghi (debounce): sửa liên tục chỉ ghi một lần, sau lần sửa cuối.
      */
     public void saveInBackground(SlangDictionary dictionary) {
         Objects.requireNonNull(dictionary, "dictionary");
+        pending.set(dictionary);
         long ticket = latestSave.incrementAndGet();
         try {
-            writer.execute(() -> writeIfLatest(dictionary, ticket));
+            writer.schedule(() -> writeIfLatest(ticket), saveDelayMillis, TimeUnit.MILLISECONDS);
         } catch (RejectedExecutionException e) {
             // store đã close (app đang thoát) → báo lỗi thay vì ném exception lên EDT
             errorListener.accept(new IOException("Store is closed, change was not saved", e));
@@ -310,9 +336,13 @@ public class DictionaryStore implements AutoCloseable {
     }
 
     /** Chạy trên luồng ghi. */
-    private void writeIfLatest(SlangDictionary dictionary, long ticket) {
+    private void writeIfLatest(long ticket) {
         if (ticket != latestSave.get()) {
             return; // còn yêu cầu mới hơn trong hàng đợi → để lần đó ghi, đỡ serialize thừa
+        }
+        SlangDictionary dictionary = pending.getAndSet(null);
+        if (dictionary == null) {
+            return; // flush() đã ghi rồi
         }
         try {
             writeAtomically(serialize(dictionary), dictionaryFile);
@@ -324,10 +354,10 @@ public class DictionaryStore implements AutoCloseable {
         }
     }
 
-    /** Chờ mọi lần ghi nền đang chờ hoàn tất (gọi khi thoát app). */
+    /** Ghi ngay lần lưu đang chờ (kể cả lần đang hẹn giờ) và chờ ghi xong. Gọi khi thoát app. */
     public void flush() {
         try {
-            writer.submit(() -> { }).get(FLUSH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            writer.submit(() -> writeIfLatest(latestSave.get())).get(FLUSH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (RejectedExecutionException e) {
             // đã close: close() đã chờ ghi xong rồi, không còn gì để chờ
         } catch (InterruptedException e) {

@@ -4,12 +4,15 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -110,6 +113,21 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     record Request(SearchTarget target, SearchMode mode, String query) {
     }
 
+    /**
+     * Dòng được chọn sẵn khi kết quả về.
+     *
+     * @param id              chọn entry có id này (sau khi thêm/sửa); -1 nếu không cần
+     * @param row             không tìm thấy id (hoặc id = -1) thì chọn dòng này, kẹp vào trong bảng (sau khi xóa)
+     * @param revealIfMissing kết quả không chứa entry {@code id} thì tìm theo tên của entry này để nó hiện ra
+     */
+    record Selection(int id, int row, SlangEntry revealIfMissing) {
+        /** Mặc định: chọn kết quả tốt nhất. */
+        static final Selection BEST = new Selection(-1, 0, null);
+    }
+
+    /** Dòng thông báo sau khi thêm/sửa/xóa: thành công (xanh) hay hướng dẫn (màu nhấn). */
+    private enum NoticeKind { SUCCESS, INFO }
+
     private enum Status { IDLE, SEARCHING, DONE, ERROR }
 
     private final SearchService service;
@@ -128,6 +146,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     // ----- dòng trạng thái + gợi ý + nút thao tác -----
     private final JLabel statusLabel = new JLabel();
+    private final JLabel noticeLabel = new JLabel();
     private final JLabel suggestLabel = new JLabel();
     private final JPanel suggestionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
     private final JButton addButton = new JButton();
@@ -154,6 +173,10 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     private List<String> shownSuggestions = List.of();
     private String errorMessage;
     private Status status = Status.IDLE;
+    /** Thông báo đang hiện (key trong .properties + tham số, để đổi ngôn ngữ vẫn dịch lại được); null nếu không có. */
+    private String noticeKey;
+    private Object[] noticeArgs = {};
+    private NoticeKind noticeKind = NoticeKind.SUCCESS;
     /** true khi code tự đặt giá trị cho các điều khiển, để listener không coi đó là thao tác của người dùng. */
     private boolean syncing;
 
@@ -175,7 +198,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         modeByTarget.put(SearchTarget.SLANG, SearchMode.PREFIX);
         modeByTarget.put(SearchTarget.DEFINITION, SearchMode.EXACT);
 
-        liveTimer = new Timer(LIVE_DELAY_MS, e -> runSearch(currentRequest()));
+        liveTimer = new Timer(LIVE_DELAY_MS, e -> runSearch(currentRequest(), Selection.BEST));
         liveTimer.setRepeats(false);
         busyTimer = new Timer(BUSY_DELAY_MS, e -> setStatus(Status.SEARCHING));
         busyTimer.setRepeats(false);
@@ -233,14 +256,64 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     /** Chạy lại lần tìm đang hiện (sau khi thêm/sửa/xóa/reset dữ liệu), không ghi lịch sử. */
     public void refresh() {
         if (shownRequest != null) {
-            runSearch(shownRequest);
+            runSearch(shownRequest, Selection.BEST);
         }
     }
 
-    /** Slang đang chọn trong bảng (bước 10 dùng cho Sửa/Xóa). */
+    /** Slang đang chọn trong bảng (dùng cho Sửa/Xóa). Có thể là bản cũ: lấy lại bản mới theo id trước khi sửa. */
     public Optional<SlangEntry> selectedEntry() {
         int row = table.getSelectedRow();
         return row < 0 ? Optional.empty() : Optional.of(tableModel.get(row).entry());
+    }
+
+    /** F1 hay F2, theo target đang chọn: để chuyển về đúng màn hình Search mà không đổi target. */
+    public Feature currentFeature() {
+        return featureOf(target);
+    }
+
+    /** Chữ đang gõ ở ô tìm nếu đang tìm theo slang (gợi ý sẵn tên cho Thêm), ngược lại là chuỗi rỗng. */
+    public String slangQuery() {
+        return target == SearchTarget.SLANG ? queryField.getText().strip() : "";
+    }
+
+    /**
+     * Sau khi thêm/sửa: hiện thông báo, tìm lại và chọn sẵn {@code entry}. Đang có kết quả thì giữ nguyên lần tìm đó
+     * (người dùng không mất chỗ đang xem); nếu entry không nằm trong đó (ví dụ vừa đổi tên) hoặc chưa tìm gì thì
+     * tìm theo tên của entry để nó hiện ra. Không ghi lịch sử.
+     */
+    public void showChange(SlangEntry entry, String noticeKey, Object... args) {
+        Objects.requireNonNull(entry, "entry");
+        setNotice(NoticeKind.SUCCESS, noticeKey, args);
+        if (shownRequest != null) {
+            runSearch(shownRequest, new Selection(entry.getId(), 0, entry));
+        } else {
+            reveal(entry);
+        }
+    }
+
+    /** Sau khi xóa: hiện thông báo, tìm lại và chọn dòng ở đúng chỗ vừa xóa (nhấn Delete liên tiếp được). */
+    public void showRemoval(String noticeKey, Object... args) {
+        setNotice(NoticeKind.SUCCESS, noticeKey, args);
+        if (shownRequest != null) {
+            runSearch(shownRequest, new Selection(-1, Math.max(0, table.getSelectedRow()), null));
+        }
+    }
+
+    /** Hướng dẫn ngắn (ví dụ "hãy chọn một slang trước"), đưa focus về ô tìm. */
+    public void showHint(String noticeKey, Object... args) {
+        setNotice(NoticeKind.INFO, noticeKey, args);
+        SwingUtilities.invokeLater(queryField::requestFocusInWindow);
+    }
+
+    /** Tìm entry theo tên của nó (target Slang, giữ mode đang chọn: mode nào cũng có tên trùng khớp ở đầu). */
+    private void reveal(SlangEntry entry) {
+        liveTimer.stop();
+        target = SearchTarget.SLANG;
+        setQueryQuietly(entry.getSlang());
+        syncControls();
+        updateHint();
+        navigator.accept(Feature.SEARCH_SLANG);
+        runSearch(currentRequest(), new Selection(entry.getId(), 0, null));
     }
 
     // ===================== Dựng giao diện =====================
@@ -323,9 +396,17 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     private JComponent buildResultArea() {
         // Dòng trạng thái + gợi ý (trái) và nút thao tác (phải)
-        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // Bề rộng ưu tiên = 0: thông báo/gợi ý dài chỉ bị cắt bớt, không được kéo giãn cả màn hình (làm co ô tìm, combo)
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)) {
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(0, super.getPreferredSize().height);
+            }
+        };
         left.add(statusLabel);
+        left.add(noticeLabel);
         left.add(suggestionPanel);
+        noticeLabel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 0));
         suggestionPanel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 0));
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
@@ -357,6 +438,16 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         bindKey(table, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "deleteSelected", () -> {
             if (table.getSelectedRow() >= 0) {
                 navigator.accept(Feature.DELETE);
+            }
+        });
+        // Bấm đúp một dòng = Sửa (F5)
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)
+                        && table.rowAtPoint(e.getPoint()) >= 0) {
+                    navigator.accept(Feature.EDIT);
+                }
             }
         });
         JScrollPane tableScroll = new JScrollPane(table);
@@ -408,6 +499,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         syncControls();
         updateHint();
         if (byUser) {
+            clearNotice();
             // Báo MainFrame để Sidebar + tiêu đề cửa sổ đổi theo F1 ↔ F2 (MainFrame sẽ gọi lại onShown, lúc đó
             // target đã khớp nên không làm gì thêm)
             navigator.accept(featureOf(target));
@@ -424,6 +516,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             return;
         }
         modeByTarget.put(target, (SearchMode) modeCombo.getSelectedItem());
+        clearNotice();
         updateHint();
         rerunIfShowing();
     }
@@ -434,7 +527,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         if (queryField.getText().isBlank()) {
             clearResults();
         } else if (shownRequest != null || isLiveMode()) {
-            runSearch(currentRequest());
+            runSearch(currentRequest(), Selection.BEST);
         }
     }
 
@@ -442,6 +535,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         if (syncing) {
             return;
         }
+        clearNotice();
         if (queryField.getText().isBlank()) {
             liveTimer.stop();
             clearResults();
@@ -457,6 +551,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     /** Tìm "thật": Enter, nút Tìm, bấm gợi ý. Được ghi vào lịch sử. */
     private void submit() {
         liveTimer.stop();
+        clearNotice();
         String query = queryField.getText().strip();
         if (query.isEmpty()) {
             clearResults();
@@ -465,7 +560,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         }
         Request request = currentRequest();
         searchListener.accept(new HistoryItem(request.target(), request.mode(), query, LocalDateTime.now()));
-        runSearch(request);
+        runSearch(request, Selection.BEST);
     }
 
     private Request currentRequest() {
@@ -476,8 +571,8 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         return modeByTarget.get(target);
     }
 
-    /** Gửi việc tìm sang luồng nền; kết quả về EDT ở {@link #showOutcome}. */
-    private void runSearch(Request request) {
+    /** Gửi việc tìm sang luồng nền; kết quả về EDT ở {@link #showOutcome}, chọn sẵn dòng theo {@code selection}. */
+    private void runSearch(Request request, Selection selection) {
         if (request.query().isEmpty()) {
             clearResults();
             return;
@@ -504,15 +599,20 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             RuntimeException finalError = error;
             SwingUtilities.invokeLater(() -> {
                 if (generation.get() == ticket) { // kết quả cũ về muộn thì bỏ
-                    showOutcome(request, finalOutcome, finalSuggestions, finalError);
+                    showOutcome(request, finalOutcome, finalSuggestions, finalError, selection);
                 }
             });
         });
     }
 
     private void showOutcome(Request request, SearchOutcome outcome, List<String> suggestions,
-                             RuntimeException error) {
+                             RuntimeException error, Selection selection) {
         busyTimer.stop();
+        if (error == null && selection.revealIfMissing() != null && indexOfId(outcome, selection.id()) < 0) {
+            // Entry vừa sửa không còn khớp lần tìm đang hiện (ví dụ vừa đổi tên) → tìm theo tên mới để nó hiện ra
+            reveal(selection.revealIfMissing());
+            return;
+        }
         shownRequest = request;
         if (error != null) {
             shownOutcome = null;
@@ -527,12 +627,30 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             setStatus(Status.DONE);
         }
         renderSuggestions();
-        if (tableModel.getRowCount() > 0) {
-            table.setRowSelectionInterval(0, 0); // chọn sẵn kết quả tốt nhất → khung chi tiết hiện ngay
-            table.scrollRectToVisible(table.getCellRect(0, 0, true));
+        int rows = tableModel.getRowCount();
+        if (rows > 0) {
+            // Mặc định chọn sẵn kết quả tốt nhất → khung chi tiết hiện ngay; sau thêm/sửa/xóa thì chọn theo selection
+            int byId = error == null ? indexOfId(outcome, selection.id()) : -1;
+            int row = byId >= 0 ? byId : Math.min(Math.max(selection.row(), 0), rows - 1);
+            table.setRowSelectionInterval(row, row);
+            table.scrollRectToVisible(table.getCellRect(row, 0, true));
         } else {
             onSelectionChanged();
         }
+    }
+
+    /** Vị trí của entry {@code id} trong các kết quả được đưa lên bảng, -1 nếu không có. */
+    private static int indexOfId(SearchOutcome outcome, int id) {
+        if (id < 0) {
+            return -1;
+        }
+        List<SearchResult> results = outcome.results();
+        for (int i = 0; i < results.size(); i++) {
+            if (results.get(i).entry().getId() == id) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void clearResults() {
@@ -626,6 +744,34 @@ public class SearchPanel extends JPanel implements FeatureScreen {
                 statusLabel.setForeground(ThemeManager.color("Label.foreground", Color.BLACK));
             }
         }
+    }
+
+    private void setNotice(NoticeKind kind, String key, Object... args) {
+        noticeKind = kind;
+        noticeKey = Objects.requireNonNull(key, "key");
+        noticeArgs = args;
+        renderNotice();
+    }
+
+    /** Người dùng tự tìm/gõ tiếp → thông báo của lần thêm/sửa/xóa trước không còn liên quan. */
+    private void clearNotice() {
+        if (noticeKey != null) {
+            noticeKey = null;
+            renderNotice();
+        }
+    }
+
+    private void renderNotice() {
+        if (noticeKey == null) {
+            noticeLabel.setText("");
+            noticeLabel.setVisible(false);
+            return;
+        }
+        String mark = noticeKind == NoticeKind.SUCCESS ? "✓ " : "→ ";
+        noticeLabel.setText(mark + Messages.format(noticeKey, noticeArgs));
+        noticeLabel.setForeground(noticeKind == NoticeKind.SUCCESS
+                ? ThemeManager.color("Actions.Green", new Color(0x2E7D32)) : ThemeManager.accentColor());
+        noticeLabel.setVisible(true);
     }
 
     private void renderSuggestions() {
@@ -745,6 +891,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         table.getTableHeader().repaint();
         updateHint();
         renderStatus();
+        renderNotice();
         renderSuggestions();
         showDetail(selectedEntry().orElse(null));
     }
@@ -759,6 +906,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         if (detailTitle != null) { // updateUI được gọi cả trong constructor của JPanel, lúc field chưa có
             applyStyles();
             renderStatus();
+            renderNotice();
             renderSuggestions();
             showDetail(selectedEntry().orElse(null));
         }
@@ -815,6 +963,25 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     String detailText() {
         return detailText.getText();
+    }
+
+    /** Thông báo đang hiện ("" nếu không có). */
+    String noticeText() {
+        return noticeLabel.getText();
+    }
+
+    /** Các slang đang hiện trên bảng, theo thứ tự. */
+    List<String> slangColumn() {
+        List<String> slangs = new ArrayList<>();
+        for (int row = 0; row < tableModel.getRowCount(); row++) {
+            slangs.add(tableModel.get(row).entry().getSlang());
+        }
+        return slangs;
+    }
+
+    /** Chọn dòng như người dùng bấm vào. */
+    void selectRow(int row) {
+        table.setRowSelectionInterval(row, row);
     }
 
     /** Bấm gợi ý thứ {@code index} như người dùng. */

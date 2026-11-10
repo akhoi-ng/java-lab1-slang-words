@@ -319,6 +319,39 @@ class DictionaryStoreTest {
     }
 
     @Test
+    void delayedSaveWritesOnlyAfterTheDelay() throws Exception {
+        Path dat = dir.resolve("dictionary.dat");
+        try (DictionaryStore store = new DictionaryStore(dat, dir.resolve("slang.txt"), 400)) {
+            SlangDictionary d = small();
+            store.saveInBackground(d);
+            assertFalse(Files.exists(dat), "chưa tới giờ ghi");
+            for (int i = 0; i < 100 && !Files.exists(dat); i++) {
+                Thread.sleep(50);
+            }
+            assertTrue(Files.exists(dat), "hết thời gian hoãn thì phải ghi");
+            assertSameContent(d, DictionaryStore.load(dat));
+        }
+    }
+
+    @Test
+    void flushWritesAPendingDelayedSaveRightAway() throws Exception {
+        Path dat = dir.resolve("dictionary.dat");
+        List<IOException> errors = new CopyOnWriteArrayList<>();
+        DictionaryStore store = new DictionaryStore(dat, dir.resolve("slang.txt"), 60_000);
+        store.setErrorListener(errors::add);
+        SlangDictionary d = small();
+        store.saveInBackground(d);
+        d.add("late", List.of("added after the save request"));
+        store.saveInBackground(d);
+
+        long start = System.nanoTime();
+        store.close(); // như lúc thoát app: không được chờ đủ 60 s
+        assertTrue(System.nanoTime() - start < 10_000_000_000L);
+        assertSameContent(d, DictionaryStore.load(dat));
+        assertEquals(List.of(), errors);
+    }
+
+    @Test
     void saveAfterCloseIsReportedNotThrown() {
         List<IOException> errors = new CopyOnWriteArrayList<>();
         DictionaryStore store = store(dir);

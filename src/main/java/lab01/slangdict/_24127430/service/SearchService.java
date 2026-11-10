@@ -85,13 +85,16 @@ public class SearchService {
         if (limit < 1) {
             throw new IllegalArgumentException("limit must be >= 1: " + limit);
         }
-        long start = System.nanoTime();
         SlangDictionary dictionary = Objects.requireNonNull(dictionarySource.get(), "dictionary");
 
+        long start;
         List<SearchResult> results;
         // Màn hình Search gọi từ luồng nền, còn add/edit/delete chạy trên EDT: giữ khóa của từ điển
         // (cùng khóa với add/replace/remove) để không đọc index đang sửa dở
         synchronized (dictionary) {
+            // Đo từ lúc đã có khóa: thời gian hiện trên màn hình là thời gian TÌM, không tính lúc chờ luồng ghi .dat
+            // (đang serialize) nhả khóa
+            start = System.nanoTime();
             Map<Integer, Integer> scoreById = target == SearchTarget.SLANG
                     ? searchNames(dictionary, mode, query == null ? "" : query)
                     : searchDefinitions(dictionary, mode, query == null ? "" : query);

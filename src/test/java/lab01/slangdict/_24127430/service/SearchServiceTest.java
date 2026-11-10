@@ -126,6 +126,34 @@ class SearchServiceTest {
         assertEquals(1, search.search(SLANG, SearchMode.EXACT, "lol", ALL).totalMatches());
     }
 
+    @Test
+    void elapsedTimeDoesNotCountWaitingForTheSaveLock() throws Exception {
+        SlangDictionary dictionary = small();
+        SearchService search = service(dictionary);
+        java.util.concurrent.CountDownLatch locked = new java.util.concurrent.CountDownLatch(1);
+        Thread saver = new Thread(() -> {
+            synchronized (dictionary) { // giống luồng ghi .dat đang serialize
+                locked.countDown();
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        });
+        saver.start();
+        locked.await();
+
+        long start = System.nanoTime();
+        SearchOutcome outcome = search.search(SLANG, SearchMode.EXACT, "lol", ALL);
+        long wall = System.nanoTime() - start;
+        saver.join();
+
+        assertEquals(2, outcome.totalMatches());
+        assertTrue(wall >= 400_000_000L, "phải chờ khóa thật: " + wall);
+        assertTrue(outcome.elapsedNanos() < 200_000_000L, "chỉ tính thời gian tìm: " + outcome.elapsedNanos());
+    }
+
     // ---------------- F1: theo tên slang ----------------
 
     @Test

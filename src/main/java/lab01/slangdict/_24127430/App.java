@@ -15,6 +15,7 @@ import lab01.slangdict._24127430.i18n.Messages;
 import lab01.slangdict._24127430.io.DictionaryStore;
 import lab01.slangdict._24127430.io.HistoryStore;
 import lab01.slangdict._24127430.io.SettingsStore;
+import lab01.slangdict._24127430.service.DictionaryService;
 import lab01.slangdict._24127430.service.HistoryService;
 import lab01.slangdict._24127430.service.SearchService;
 import lab01.slangdict._24127430.ui.Feature;
@@ -22,6 +23,7 @@ import lab01.slangdict._24127430.ui.LoadingWindow;
 import lab01.slangdict._24127430.ui.MainFrame;
 import lab01.slangdict._24127430.ui.SwingLocalizer;
 import lab01.slangdict._24127430.ui.ThemeManager;
+import lab01.slangdict._24127430.ui.panels.EntryActions;
 import lab01.slangdict._24127430.ui.panels.HistoryPanel;
 import lab01.slangdict._24127430.ui.panels.SearchPanel;
 
@@ -109,7 +111,7 @@ public final class App {
                         loaded.dictionary().size(), loaded.source(), loaded.elapsedMillis());
                 mainFrame = new MainFrame(settings, loaded, store.dictionaryFile().getParent(), VERSION,
                         () -> exit(store, historyStore));
-                installScreens(mainFrame, loaded, history);
+                installScreens(mainFrame, new DictionaryService(loaded.dictionary(), store), history);
                 mainFrame.setVisible(true);
                 pendingSaveErrors.forEach(Runnable::run);
                 pendingSaveErrors.clear();
@@ -118,9 +120,9 @@ public final class App {
     }
 
     /** Gắn các màn hình thật vào MainFrame thay cho màn hình tạm (mỗi bước 8–12 thêm một phần). */
-    private static void installScreens(MainFrame frame, DictionaryStore.LoadResult loaded, HistoryService history) {
-        // F1, F2. Bước 10–11 sẽ đổi loaded::dictionary thành nguồn "từ điển hiện tại", vì Reset thay object từ điển
-        SearchService searchService = new SearchService(loaded::dictionary);
+    private static void installScreens(MainFrame frame, DictionaryService dictionary, HistoryService history) {
+        // F1, F2. Lấy từ điển qua dictionary::current chứ không giữ cứng một object, vì Reset (F7) thay object mới
+        SearchService searchService = new SearchService(dictionary::current);
         SearchPanel searchPanel = new SearchPanel(searchService, frame::showFeature);
         searchPanel.setSearchListener(history::add); // mỗi lần tìm "thật" (Enter/nút Tìm/gợi ý) → một dòng lịch sử
         frame.setScreen(Feature.Card.SEARCH, searchPanel);
@@ -129,6 +131,13 @@ public final class App {
         HistoryPanel historyPanel = new HistoryPanel(history,
                 item -> searchPanel.search(item.target(), item.mode(), item.query()));
         frame.setScreen(Feature.Card.HISTORY, historyPanel);
+
+        // F4, F5, F6: dialog thêm/sửa, xác nhận xóa; thao tác trên slang đang chọn ở màn hình Search
+        EntryActions entryActions = new EntryActions(dictionary, searchPanel, frame::showFeature);
+        frame.setAction(Feature.ADD, entryActions::add);
+        frame.setAction(Feature.EDIT, entryActions::edit);
+        frame.setAction(Feature.DELETE, entryActions::delete);
+        dictionary.addChangeListener(() -> frame.showDictionarySize(dictionary.size()));
     }
 
     /** Chạy trên EDT. {@code dialogKey}: chữ của dialog cảnh báo, khác nhau cho từ điển và lịch sử. */

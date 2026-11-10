@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–8, bước 9 xong code nhưng chưa commit** → commit bước 9 rồi làm bước 10 |
-| Test | 116/116 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 13 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
+| Bước đang ở | **Xong bước 1–9, bước 10 xong code nhưng chưa commit** → commit bước 10 rồi làm bước 11 |
+| Test | 167/167 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 14 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -56,8 +56,8 @@
 | 6 | `SearchService` + `BigDataGenerator` + benchmark 100k | F1, F2 (logic) | ✅ 10/11 |
 | 7 | Khung UI: menu, sidebar, CardLayout, đổi ngôn ngữ, đổi theme, màn hình loading | yêu cầu chung 2 | ✅ 10/11 |
 | 8 | `SearchPanel` | **F1, F2** | ✅ 11/11 |
-| 9 | History (service + store + panel) | **F3** | 🟡 11/11 |
-| 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ⬜ |
+| 9 | History (service + store + panel) | **F3** | ✅ 11/11 |
+| 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | 🟡 11/11 |
 | 11 | Reset + Random | **F7, F8** | ⬜ |
 | 12 | Quiz (2 loại) | **F9, F10** | ⬜ |
 | 13 | README, file tự chấm điểm, rà lại, jar cuối | nộp bài | ⬜ |
@@ -77,7 +77,7 @@
 ## 3. Việc cần làm NGAY
 
 1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
-2. ~~Dùng prompt của bước 6, 7, 8, 9~~ → xong. Commit bước 9 rồi dùng prompt của **bước 10** (mục 5 bên dưới).
+2. ~~Dùng prompt của bước 6, 7, 8, 9, 10~~ → xong. Commit bước 10 rồi dùng prompt của **bước 11** (mục 5 bên dưới).
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 
 ---
@@ -129,6 +129,7 @@ Các method:
   - `loadOriginal()`: dùng cho Reset
   - Ghi nền an toàn: ~~serialize ra `byte[]` ngay trên luồng gọi~~ → **đã đổi khi làm:** đo được serialize 100k mất ~2 s (UI sẽ đứng sau mỗi add/edit/delete), nên `saveInBackground` trả về ngay, **luồng nền vừa serialize vừa ghi**. Snapshot vẫn nhất quán vì `SlangDictionary.writeObject` và `add/replace/remove` cùng `synchronized` (kiểu `java.util.Vector`). Nhiều lần lưu dồn dập chỉ ghi 1 lần. Cung cấp `flush()` để chờ ghi xong khi thoát app (App gọi qua shutdown hook)
   - Số đo (máy dev): 7,6k entry: build ~50–100 ms, đọc .dat ~45–110 ms, file 2,3 MB · 100k entry: build ~1,6–3,3 s, đọc .dat ~0,8–1,5 s, serialize ~1,5–2,5 s, file 30 MB
+  - **Sửa ở bước 10:** luồng ghi giữ khóa từ điển suốt lúc serialize (100k: ~2 s), nên lần tìm lại ngay sau khi thêm/sửa/xóa phải đứng chờ và màn hình hiện "~2000 ms". Đã thêm: `createDefault()` hoãn ghi **1,5 s sau lần sửa cuối** (debounce, constructor 2 tham số vẫn ghi ngay để test cũ giữ nguyên); `flush()` ghi ngay lần đang hẹn giờ; `SearchService` đo giờ **sau khi** lấy được khóa
 - `App`: load dữ liệu trước khi hiện giao diện, tạm in log số entry + thời gian (bước 7 sẽ thay bằng màn hình loading)
 - **Test** (dùng `@TempDir`): save rồi load ra đúng dữ liệu; file `.dat` hỏng thì build lại từ text; lần chạy thứ 2 đọc từ DAT
 
@@ -269,6 +270,24 @@ Các method:
 - `ConflictDialog`: 3 nút + danh sách entry trùng tên
 - Delete: `JOptionPane` xác nhận, hiện tên và nghĩa của entry sắp xóa
 - Test service cho cả 3 lựa chọn × add/edit
+
+**Kết quả khi làm (11/11):**
+- Class mới:
+  - `service/ConflictResolver`: interface hàm (functional interface) có record `Conflict` (thao tác, tên, nghĩa mới, các entry trùng tên, entry đang sửa) và `Decision` (lựa chọn + entry đích). Service gọi resolver mà không biết gì về Swing; test truyền lambda.
+  - `service/ChangeResult`: kết quả `CHANGED` / `UNCHANGED` / `CANCELLED` + lựa chọn đã dùng + entry sau khi đổi + các entry bị xóa, để giao diện báo lại đúng câu.
+  - `ui/panels/EntryActions`: nối dialog ↔ `DictionaryService` ↔ `SearchPanel`. Dialog đi qua interface `Prompts`, test thay bằng câu trả lời soạn sẵn.
+- `DictionaryService` giữ **từ điển hiện tại** (`current()`): `SearchService` giờ lấy từ điển qua `dictionary::current`. **Bước 11 (Reset) chỉ cần gán object mới vào field `dictionary` rồi báo listener.**
+- Bổ sung so với đặc tả:
+  - Trùng tên so sánh **không phân biệt hoa thường**. Sửa mà không đổi tên (chỉ đổi nghĩa, hay đổi hoa/thường) thì không hỏi, kể cả khi vốn đã có entry khác cùng tên.
+  - Dữ liệu nhập được chuẩn hóa: bỏ khoảng trắng hai đầu, bỏ dòng trống, bỏ nghĩa trùng (không phân biệt hoa thường). Tên không được chứa `` ` ``, nghĩa không được chứa `|` (hai ký tự ngăn cách của `slang.txt`); tên được phép chứa `|` vì file gốc có `:|`.
+  - Thêm nghĩa mà mọi nghĩa đã có sẵn, hoặc sửa mà không đổi gì → `UNCHANGED`, không lưu.
+  - Dialog trùng tên có nút **"Quay lại sửa"**: mở lại dialog nhập với đúng dữ liệu vừa gõ. Focus mặc định **không** nằm ở "Ghi đè" (nhiều mục → danh sách, một mục → nút quay lại) để lỡ Enter không mất dữ liệu.
+  - Dialog nhập báo trước "⚠ Đã có N slang tên này" ngay khi đang gõ tên.
+  - Thêm: tên điền sẵn là chữ đang gõ ở ô tìm slang (tìm không thấy → bấm Thêm). Enter ở ô tên: chưa có nghĩa thì chuyển xuống gõ nghĩa, có rồi thì lưu; Ctrl+Enter lưu; Insert/Delete/Alt+↑↓ trên bảng nghĩa.
+  - Sửa/Xóa luôn làm trên slang đang chọn ở màn hình Search; gọi từ màn hình khác thì đưa về màn hình Search, chưa chọn thì hiện hướng dẫn. Bấm đúp một dòng kết quả = Sửa.
+  - Sau khi thêm/sửa/xóa: dòng thông báo màu xanh ("✓ Đã thêm slang "yeet"."), tìm lại và **chọn sẵn entry vừa đổi**; entry không còn khớp lần tìm đang hiện (ví dụ đổi tên) thì tự tìm theo tên mới. Xóa xong thì chọn dòng kế tiếp. Thanh trạng thái cập nhật số slang.
+- Giới hạn còn lại (chỉ ở 100k): nếu đúng lúc luồng ghi đang serialize (~2 s, bắt đầu 1,5 s sau lần sửa cuối) mà người dùng thêm/sửa/xóa tiếp, thao tác đó chờ tới khi ghi xong. Bỏ hẳn được bằng cách ghi nhật ký thay đổi (journal) thay vì serialize cả từ điển, nhưng phải đổi định dạng file của bước 5.
+- Đã chạy jar thật (harness tự bấm, chụp màn hình) ở cả 7,6k và 100k: thêm mới, thêm trùng → thêm nghĩa, thêm bản trùng tên, đổi tên trùng 2 mục → quay lại → hủy, xóa có xác nhận, Sửa khi chưa chọn, theme sáng + English; tắt app rồi đọc lại `dictionary.dat` thấy đúng thay đổi.
 
 ### Bước 11: Reset + Random (F7, F8)
 
