@@ -2,15 +2,9 @@ package lab01.slangdict._24127430.ui.panels;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
-import java.awt.geom.RoundRectangle2D;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -28,7 +22,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
-import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
@@ -337,78 +330,5 @@ public class RandomPanel extends JPanel implements FeatureScreen {
 
     boolean todayButtonEnabled() {
         return todayButton.isEnabled();
-    }
-
-    // ===================== Thẻ bo góc =====================
-
-    /**
-     * Nội dung bên trong JScrollPane: luôn rộng đúng bằng khung nhìn (để chữ nghĩa tự xuống dòng thay vì sinh thanh
-     * cuộn ngang), cao theo nội dung (dài quá thì cuộn dọc).
-     */
-    private static final class WidthTrackingPanel extends JPanel implements Scrollable {
-
-        WidthTrackingPanel() {
-            super(new BorderLayout());
-        }
-
-        @Override
-        public Dimension getPreferredScrollableViewportSize() {
-            return getPreferredSize();
-        }
-
-        @Override
-        public int getScrollableUnitIncrement(Rectangle visible, int orientation, int direction) {
-            return 16;
-        }
-
-        @Override
-        public int getScrollableBlockIncrement(Rectangle visible, int orientation, int direction) {
-            return Math.max(16, visible.height - 32);
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportWidth() {
-            return true;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportHeight() {
-            return false;
-        }
-    }
-
-    /** Panel nền hơi khác màu nền màn hình, bo góc, có viền mảnh: làm nổi slang đang hiện. */
-    private static final class RoundedCard extends JPanel {
-
-        private static final int ARC = 20;
-
-        RoundedCard() {
-            super(new BorderLayout());
-            setOpaque(false); // tự vẽ nền bo góc, phần góc ngoài để trong suốt
-            setBorder(BorderFactory.createEmptyBorder(22, 28, 22, 28));
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            try {
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                RoundRectangle2D shape = new RoundRectangle2D.Float(0, 0, getWidth() - 1, getHeight() - 1, ARC, ARC);
-                Color base = ThemeManager.color("Panel.background", Color.WHITE);
-                g2.setColor(ThemeManager.shade(base, 0.05f));
-                g2.fill(shape);
-                // Vạch màu nhấn bên trái, cắt theo góc bo của thẻ
-                Graphics2D bar = (Graphics2D) g2.create();
-                bar.clip(shape);
-                bar.setColor(ThemeManager.accentColor());
-                bar.fillRect(0, 0, 6, getHeight());
-                bar.dispose();
-                g2.setColor(ThemeManager.color("Component.borderColor", Color.GRAY));
-                g2.draw(shape);
-            } finally {
-                g2.dispose();
-            }
-            super.paintComponent(g);
-        }
     }
 }

@@ -12,6 +12,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import lab01.slangdict._24127430.core.SlangDictionary;
+import lab01.slangdict._24127430.model.QuizQuestion;
+import lab01.slangdict._24127430.model.QuizType;
 import lab01.slangdict._24127430.model.SearchMode;
 import lab01.slangdict._24127430.model.SearchTarget;
 import lab01.slangdict._24127430.tools.BigDataGenerator;
@@ -81,5 +83,25 @@ class SearchBenchmarkTest {
             }
         }
         assertTrue(failures.isEmpty(), "Searches over " + LIMIT_MS + " ms: " + failures);
+    }
+
+    @Test
+    void quizQuestionsOn100kAreUnderOneSecond() {
+        // F9, F10 trên 100k: lần đầu (chưa warm-up) và trung bình 1.000 câu, cả kiểm tra lại câu hỏi (isValid)
+        QuizService quiz = new QuizService(() -> big);
+        for (QuizType type : QuizType.values()) {
+            long start = System.nanoTime();
+            QuizQuestion first = quiz.next(type);
+            double firstMs = (System.nanoTime() - start) / 1e6;
+
+            start = System.nanoTime();
+            for (int i = 0; i < 1000; i++) {
+                assertTrue(quiz.isValid(quiz.next(type, first.answer().getId())));
+            }
+            double averageMs = (System.nanoTime() - start) / 1e6 / 1000;
+            System.out.printf("  quiz %-19s first %6.2f ms, average of 1,000: %6.3f ms%n", type, firstMs, averageMs);
+            assertTrue(firstMs < LIMIT_MS, type + " first question took " + firstMs + " ms");
+            assertTrue(averageMs < LIMIT_MS, type + " average " + averageMs + " ms");
+        }
     }
 }

@@ -87,12 +87,12 @@ Package gốc: `lab01.slangdict._24127430`. Phần tên package không được 
 | | | `HistoryService` | ✅ |
 | | | `DictionaryService`, `ConflictResolver`, `ChangeResult` (thêm/sửa/xóa) | ✅ |
 | | | `RandomService` (slang hôm nay + random) | ✅ |
-| | | `QuizService` | ⬜ |
+| | | `QuizService` (đố vui 4 đáp án không mơ hồ) | ✅ |
 | `ui` | **Giao diện Swing** | Khung: `MainFrame`, `Sidebar`, `Feature`, `FeatureScreen`, `ThemeManager`, `LoadingWindow`, `SwingLocalizer`, `NumberBadgeIcon`, `AppIcon`, `dialogs/AboutDialog`, `panels/PlaceholderPanel` | ✅ |
 | | | `panels/SearchPanel` (F1, F2), `panels/HistoryPanel` (F3) | ✅ |
 | | | `panels/EntryActions`, `dialogs/EntryEditorDialog`, `dialogs/ConflictDialog` (F4, F5, F6) | ✅ |
 | | | `panels/ResetAction`, `dialogs/ResetDialog` (F7), `panels/RandomPanel` (F8) | ✅ |
-| | | `panels/QuizPanel` | ⬜ |
+| | | `panels/QuizPanel` (F9, F10), `panels/RoundedCard` + `panels/WidthTrackingPanel` (dùng chung với F8) | ✅ |
 | `i18n` | Chữ song ngữ Anh/Việt, đổi ngay khi đang chạy | `Messages` + `messages_vi/en.properties` | ✅ |
 | `tools` | Sinh 100k slang để benchmark | `BigDataGenerator` | ✅ |
 
@@ -724,6 +724,43 @@ slang hôm nay   = entry có score cao nhất  (hòa thì id nhỏ hơn)
 
 **Thanh trạng thái** sau Reset ghi "7.638 slang · khôi phục từ slang.txt gốc trong 120 ms" thay cho nguồn lúc khởi động.
 
+### 4.16 Đố vui (bước 12, F9 + F10): `QuizService`, `QuizPanel`
+
+**Luật "không mơ hồ":** mỗi câu có 4 đáp án và **đúng một** đáp án đúng. Có hai bẫy:
+
+| Loại | Đề | Đáp án đúng | Đáp án nhiễu KHÔNG được là |
+|---|---|---|---|
+| F9 `SLANG_TO_DEFINITION` | tên slang S | 1 nghĩa ngẫu nhiên của entry | nghĩa của **bất kỳ entry nào tên S** (tên trùng là entry riêng, mục 4.7) |
+| F10 `DEFINITION_TO_SLANG` | 1 nghĩa D | tên slang | tên slang có **một entry nào đó mang nghĩa D** (file gốc có hơn 100 nghĩa dùng chung cho nhiều slang, ví dụ "Laughing out loud") |
+
+- Hai nghĩa coi là trùng khi giống nhau sau khi bỏ hoa thường và dấu câu: `meaningKey("Laugh out loud!") = "laugh out loud"` (dùng `Tokenizer.tokens`). Hai tên slang so không phân biệt hoa thường (`Tokenizer.normalizeName`), giống khi tra.
+- 4 đáp án đôi một khác nhau theo đúng cách so sánh đó, rồi `Collections.shuffle` để đáp án đúng nằm ở vị trí ngẫu nhiên.
+
+**Thuật toán chọn đáp án nhiễu:**
+
+```
+used = key của mọi đáp án đúng (F9: mọi nghĩa của các entry tên S; F10: tên của đề)
+lặp tối đa 64 lần:  c = randomEntry()            ← O(1), danh sách id + swap-remove (mục 4.7)
+                    nếu c hợp lệ và key chưa có trong used → nhận, thêm vào used
+chưa đủ 3?          duyệt hết từ điển một lượt     ← hiếm: từ điển rất nhỏ hoặc gần như toàn tên trùng
+vẫn chưa đủ?        thử entry khác làm đề (tối đa 20; từ điển ≤ 20 entry thì thử hết)
+                    → hết cách thì NotEnoughDataException
+```
+
+- Với 7.638 slang thường chỉ cần 3–4 lần bốc. Kiểm tra một tên cho F10 là O(số entry trùng tên) nhờ `idsByName` (HashMap). Đo trên 100k slang: câu đầu ~0,5 ms, trung bình ~0,04 ms một câu.
+- Phần "duyệt hết" làm kết luận "không đủ dữ liệu" luôn đúng: test với từ điển 3–4 entry, tên trùng, nghĩa chỉ khác dấu câu.
+- `next(type, avoidId)`: đề không lấy lại slang của câu vừa hỏi (chỉ lấy lại khi không còn entry nào khác làm đề được).
+- `isValid(question)`: kiểm tra lại một câu với từ điển **hiện tại**. Đáp án đúng phải còn đúng, đáp án nhiễu phải vẫn sai.
+
+**`QuizPanel`** (một class, App tạo 2 object cho F9 và F10, dùng chung một `QuizService`):
+- Thẻ đề bài (`RoundedCard`), 4 nút đáp án, dòng phản hồi, nút **Câu tiếp** (Enter) và **Chơi lại**. Thống kê CÂU / ĐÚNG / CHUỖI ĐÚNG / KỶ LỤC.
+- Trả lời xong: đáp án đúng tô xanh ✓, đáp án chọn sai tô đỏ ✗, còn lại mờ đi; slang nhiều nghĩa thì liệt kê đủ các nghĩa. Màu trộn từ `Actions.Green`/`Actions.Red` của FlatLaf với màu nền, nên đổi sáng/tối vẫn hợp.
+- Phím 1–4 (cả bàn phím số) để chọn, Enter sang câu tiếp. Nút đáp án **không nhận focus**, nên Enter không vô tình chọn đáp án đang có focus.
+- Nút đáp án là `JButton` chứa `JLabel` (số) + `JTextArea` (đáp án dài tự xuống dòng). `JTextArea` có bộ nghe chuột riêng nên sẽ "nuốt" cú bấm; nó trả `contains(x, y) = false`, Swing coi như chuột không nằm trên nó và giao sự kiện cho nút cha.
+- Chọn **Không giới hạn / 10 câu / 20 câu**; hết lượt thì hiện bảng tổng kết (điểm, %, chuỗi đúng dài nhất, nhận xét, các câu sai kèm đáp án đúng và đáp án đã chọn). Kỷ lục giữ suốt lúc app chạy.
+- Từ điển đổi (Observer qua `DictionaryService.addChangeListener`): câu **chưa trả lời** mà `isValid` = false thì đổi câu khác, không tính điểm; câu đã trả lời và bảng tổng kết giữ nguyên. Màn hình đang ẩn thì để dành tới lúc mở (giống F8). Từ điển không đủ dữ liệu thì hiện hướng dẫn thêm slang / khôi phục.
+- Phần thân đổi giữa 3 view (đang chơi / tổng kết / không đủ dữ liệu) bằng cách thay component. View đang ẩn không nằm trong cửa sổ, nên khi đổi theme FlatLaf không cập nhật nó. `updateUI` tự gọi `SwingUtilities.updateComponentTreeUI` cho các view đang ẩn (lỗi này tìm ra khi chạy app thật).
+
 ---
 
 ## 5. Unit test
@@ -739,7 +776,7 @@ slang hôm nay   = entry có score cao nhất  (hòa thì id nhỏ hơn)
 | `io/AppPathsTest` | 3 trường hợp chọn thư mục data (system property / chạy từ jar / chạy trong IDE), tự tạo thư mục |
 | `io/DictionaryStoreTest` | Lưu rồi đọc lại đúng; file sai magic/version/bị cắt cụt/chứa class lạ đều bị từ chối; **đổi bất kỳ byte nào cũng bị CRC phát hiện**; lần đầu build từ text, lần sau đọc `.dat`; `.dat` hỏng thì build lại; lưu dồn dập ra đúng trạng thái cuối; vừa sửa vừa lưu không ra file "nửa vời"; lỗi ghi nền được báo qua listener |
 | `service/SearchServiceTest` | Từng mode × target trên từ điển nhỏ (kể cả ký hiệu `:\|`, tên trùng, AND, thưởng nguyên cụm, k = 0 cho từ ngắn); `limit` cắt đúng mà `totalMatches` vẫn đủ; luôn dùng từ điển hiện tại sau khi đổi (giống Reset); **so với cách duyệt tuần tự trên file gốc** cho cả 8 tổ hợp; gợi ý "Có phải bạn muốn tìm" (giữ cách viết gốc, không gợi ý lại chính query, sắp theo khoảng cách, chỉ sửa từ không có trong từ vựng) |
-| `service/SearchBenchmarkTest` | Build 100k, mỗi tổ hợp (cả query "nặng" như `e`, `a`) phải < 1 s; in bảng thời gian ra console |
+| `service/SearchBenchmarkTest` | Build 100k, mỗi tổ hợp (cả query "nặng" như `e`, `a`) phải < 1 s; (bước 12) quiz F9/F10 trên 100k: câu đầu và trung bình 1.000 câu < 1 s (thực tế < 1 ms); in bảng thời gian ra console |
 | `tools/BigDataGeneratorTest` | Giữ nguyên entry gốc, id không trùng, tên tổng hợp không trùng và đúng dạng, cùng seed thì cùng dữ liệu, file ghi ra đọc lại được, `main` ghi đúng số lượng |
 | `i18n/MessagesTest` | Hai file `.properties` có **đúng cùng bộ key**, không có giá trị rỗng, chuỗi có tham số không chứa dấu `'` đơn lẻ; tiếng Việt đọc đúng UTF-8; đổi ngôn ngữ thì chữ đổi và listener được gọi đúng một lần (chọn lại ngôn ngữ đang dùng thì không gọi); `vi-VN` → `vi`, ngôn ngữ lạ → mặc định; số định dạng theo ngôn ngữ (7.638 / 7,638) |
 | `io/SettingsStoreTest` | Chưa có file thì dùng mặc định; lưu rồi đọc lại đúng (tự tạo thư mục, không sót file `.tmp`); giá trị lạ/rỗng → mặc định; file hỏng không làm app lỗi và vẫn ghi đè được |
@@ -753,12 +790,14 @@ slang hôm nay   = entry có score cao nhất  (hòa thì id nhỏ hơn)
 | `service/RandomServiceTest` | Cùng ngày luôn ra cùng slang, kể cả "mở lại app" (build lại từ file); 60 ngày ra ≥ 55 slang khác nhau; 5.000 ngày trên 10 entry thì entry nào cũng trúng ~500 lần; **thêm một slang thì một ngày chỉ có thể đổi sang chính slang mới** (365 ngày, đổi ≤ 3 ngày); sửa nghĩa giữ nguyên slang của ngày; xóa chỉ đổi ngày có slang bị xóa; random không lặp lại slang đang hiện và đi tới mọi entry; từ điển trống/1 entry; luôn dùng từ điển hiện tại (giống sau Reset) |
 | `ui/panels/ResetActionTest` | Hủy thì không đổi gì và không khóa cửa sổ; dialog nhận đúng số slang/số lịch sử/file gốc; reset giữ lịch sử nếu không chọn, xóa nếu chọn; màn hình Search tìm lại trên dữ liệu gốc (slang người dùng thêm biến mất) và hiện thông báo; khóa rồi mở khóa cửa sổ; đã lưu xuống `.dat`; file gốc lỗi → báo lỗi, từ điển và lịch sử giữ nguyên, sửa file xong thì reset lại được |
 | `ui/panels/RandomPanelTest` | Mở màn hình ra slang của ngày (đúng chữ, đúng nghĩa đánh số, nút "Về hôm nay" tắt); Random khác rồi quay về hôm nay; qua nửa đêm thì đổi sang slang của ngày mới; slang đang hiện bị sửa thì hiện nghĩa mới; slang random bị xóa thì chọn slang khác mà vẫn ở chế độ random; sau Reset lấy từ từ điển mới; "Tra trong từ điển"; từ điển trống; đổi ngôn ngữ thì ngày đổi theo ("Wednesday, November 11, 2026") |
+| `service/QuizServiceTest` | **1.000 câu ngẫu nhiên trên dữ liệu gốc cho mỗi loại** đều có 4 đáp án khác nhau và đúng 1 đáp án đúng (kiểm tra bằng cách duyệt tuần tự độc lập), đáp án đúng rải đều 4 vị trí; dữ liệu gốc thật sự có nghĩa dùng chung; tên trùng (lol/LOL) không làm đáp án nhiễu của nhau; slang cùng nghĩa (chỉ khác dấu câu) không cùng xuất hiện; không đủ dữ liệu → `NotEnoughDataException` (từ điển trống, 3 entry, 4 entry nhưng chỉ 3 tên/nghĩa khác nhau), vừa đủ 4 entry thì chạy; câu tiếp không lặp lại đề (trừ khi chỉ còn đúng đề đó); dùng từ điển hiện tại sau Reset; `isValid` phát hiện thêm entry trùng tên mang đáp án nhiễu, xóa slang của đề, sửa đáp án nhiễu thành có nghĩa của đề |
+| `ui/panels/QuizPanelTest` | Mở màn hình có câu hỏi, chưa chọn gì, chưa được bỏ qua; chọn đúng → xanh, các đáp án khác mờ, liệt kê các nghĩa, bấm tiếp không tính; chọn sai → đỏ + xanh, báo số đáp án đúng; phím 1–4, bàn phím số, Enter; chuỗi đúng và lời khen từ câu thứ 3, kỷ lục giữ khi chơi lại; lượt 10 câu → nút "Xem kết quả" → bảng tổng kết đúng điểm/%/nhận xét/các câu sai → Enter chơi lượt mới; lượt 10/10; sửa không liên quan giữ câu, xóa slang của đề thì đổi câu, câu đã trả lời giữ nguyên; từ điển 3 slang → hướng dẫn, thêm slang thứ 4 → có câu; sau Reset; F10 hỏi nghĩa, đáp án là slang; đổi sang English |
 | `ui/dialogs/ResetDialogTest` | Checkbox "xóa cả lịch sử" mặc định không chọn, bị tắt khi lịch sử trống; hiện số slang theo định dạng ngôn ngữ; file gốc trong jar ghi thành chữ dễ hiểu, đường dẫn ngoài được thoát ký tự HTML |
 | `ui/FeatureTest` | Đúng 10 chức năng đánh số 1–10; mọi card đều có chức năng, F4–F7 là hành động; phím tắt không trùng (Ctrl+1 … Ctrl+0); mọi chức năng và nhóm có chữ ở cả hai ngôn ngữ. Không tạo cửa sổ nên chạy được trên máy không có màn hình |
 
 Bước 10 cũng thêm vào `DictionaryStoreTest` (hoãn ghi thì chưa ghi ngay nhưng hết giờ là ghi; `close()` ghi ngay lần đang hẹn giờ 60 s) và `SearchServiceTest` (thời gian tìm không tính lúc chờ khóa).
 
-Tổng cộng **204 test** (tới hết bước 11). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống; bước 10 chạy jar thật ở 7,6k và 100k (thêm, thêm trùng → thêm nghĩa / tạo bản mới, đổi tên trùng 2 mục → quay lại, xóa, theme sáng + English) rồi đọc lại `dictionary.dat` sau khi thoát; bước 11 chạy app thật (harness tự bấm, chụp màn hình): slang hôm nay, Random khác, slang 14 nghĩa dài (xuống dòng + cuộn), theme sáng + English, Tra trong từ điển, dialog Reset có tick "xóa cả lịch sử", thông báo kết quả, thanh trạng thái, Lịch sử trống sau Reset.
+Tổng cộng **232 test** (tới hết bước 12). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống; bước 10 chạy jar thật ở 7,6k và 100k (thêm, thêm trùng → thêm nghĩa / tạo bản mới, đổi tên trùng 2 mục → quay lại, xóa, theme sáng + English) rồi đọc lại `dictionary.dat` sau khi thoát; bước 11 chạy app thật (harness tự bấm, chụp màn hình): slang hôm nay, Random khác, slang 14 nghĩa dài (xuống dòng + cuộn), theme sáng + English, Tra trong từ điển, dialog Reset có tick "xóa cả lịch sử", thông báo kết quả, thanh trạng thái, Lịch sử trống sau Reset; bước 12 chạy jar thật (harness tự bấm, chụp màn hình): F9 theme tối/tiếng Việt (câu hỏi, chọn sai, chọn đúng), F10 theme sáng/English, lượt 10 câu ra bảng tổng kết, đổi theme/ngôn ngữ trên bảng tổng kết.
 
 Test có ghi file dùng `testutil/ScratchDir` thay cho `@TempDir`: trên Windows, trình diệt virus đôi khi còn giữ file vừa ghi, khiến `@TempDir` dọn dẹp thất bại và đánh fail cả test dù test đúng.
 

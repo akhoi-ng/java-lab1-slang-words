@@ -15,10 +15,12 @@ import lab01.slangdict._24127430.i18n.Messages;
 import lab01.slangdict._24127430.io.DictionaryStore;
 import lab01.slangdict._24127430.io.HistoryStore;
 import lab01.slangdict._24127430.io.SettingsStore;
+import lab01.slangdict._24127430.model.QuizType;
 import lab01.slangdict._24127430.model.SearchMode;
 import lab01.slangdict._24127430.model.SearchTarget;
 import lab01.slangdict._24127430.service.DictionaryService;
 import lab01.slangdict._24127430.service.HistoryService;
+import lab01.slangdict._24127430.service.QuizService;
 import lab01.slangdict._24127430.service.RandomService;
 import lab01.slangdict._24127430.service.SearchService;
 import lab01.slangdict._24127430.ui.Feature;
@@ -28,6 +30,7 @@ import lab01.slangdict._24127430.ui.SwingLocalizer;
 import lab01.slangdict._24127430.ui.ThemeManager;
 import lab01.slangdict._24127430.ui.panels.EntryActions;
 import lab01.slangdict._24127430.ui.panels.HistoryPanel;
+import lab01.slangdict._24127430.ui.panels.QuizPanel;
 import lab01.slangdict._24127430.ui.panels.RandomPanel;
 import lab01.slangdict._24127430.ui.panels.ResetAction;
 import lab01.slangdict._24127430.ui.panels.SearchPanel;
@@ -152,6 +155,15 @@ public final class App {
                 slang -> searchPanel.search(SearchTarget.SLANG, SearchMode.EXACT, slang));
         dictionary.addChangeListener(randomPanel::dictionaryChanged);
         frame.setScreen(Feature.Card.RANDOM, randomPanel);
+
+        // F9, F10: hai màn hình đố vui dùng chung một QuizService; từ điển đổi thì câu chưa trả lời được kiểm tra lại
+        QuizService quizService = new QuizService(dictionary::current);
+        QuizPanel slangQuiz = new QuizPanel(QuizType.SLANG_TO_DEFINITION, quizService);
+        QuizPanel definitionQuiz = new QuizPanel(QuizType.DEFINITION_TO_SLANG, quizService);
+        dictionary.addChangeListener(slangQuiz::dictionaryChanged);
+        dictionary.addChangeListener(definitionQuiz::dictionaryChanged);
+        frame.setScreen(Feature.Card.QUIZ_SLANG, slangQuiz);
+        frame.setScreen(Feature.Card.QUIZ_DEFINITION, definitionQuiz);
     }
 
     /** Chạy trên EDT. {@code dialogKey}: chữ của dialog cảnh báo, khác nhau cho từ điển và lịch sử. */

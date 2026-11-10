@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–10, bước 11 xong code nhưng chưa commit** → commit bước 11 rồi làm bước 12 |
-| Test | 204/204 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 15 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
+| Bước đang ở | **Xong bước 1–11, bước 12 xong code nhưng chưa commit** → commit bước 12 rồi làm bước 13 |
+| Test | 232/232 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 16 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -58,8 +58,8 @@
 | 8 | `SearchPanel` | **F1, F2** | ✅ 11/11 |
 | 9 | History (service + store + panel) | **F3** | ✅ 11/11 |
 | 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ✅ 11/11 |
-| 11 | Reset + Random | **F7, F8** | 🟡 11/11 |
-| 12 | Quiz (2 loại) | **F9, F10** | ⬜ |
+| 11 | Reset + Random | **F7, F8** | ✅ 11/11 |
+| 12 | Quiz (2 loại) | **F9, F10** | 🟡 11/11 |
 | 13 | README, file tự chấm điểm, rà lại, jar cuối | nộp bài | ⬜ |
 
 ### Lịch commit đề xuất
@@ -77,7 +77,7 @@
 ## 3. Việc cần làm NGAY
 
 1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
-2. ~~Dùng prompt của bước 6 → 11~~ → xong. Commit bước 11 rồi dùng prompt của **bước 12** (mục 5 bên dưới).
+2. ~~Dùng prompt của bước 6 → 12~~ → xong. Commit bước 12 rồi dùng prompt của **bước 13** (mục 5 bên dưới).
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 
 ---
@@ -322,6 +322,24 @@ Các method:
   - Xáo trộn vị trí đáp án; từ điển có ít hơn 4 lựa chọn hợp lệ thì báo lỗi rõ ràng
 - `QuizPanel(QuizType)`: đề bài chữ lớn, 4 nút (phím 1–4), tô xanh/đỏ, nút "Câu tiếp" (Enter), điểm / streak / streak cao nhất; chọn chế độ Vô hạn / 10 / 20 câu, hết lượt thì hiện bảng tổng kết
 - Test: 1.000 câu ngẫu nhiên đều hợp lệ (4 đáp án khác nhau, đúng 1 đáp án đúng, không mơ hồ)
+
+**Kết quả khi làm (11/11):**
+- Class mới / thay đổi:
+  - `service/QuizService`: `next(type)`, `next(type, avoidId)` (đề không lấy lại slang của câu vừa hỏi), `isValid(question)` (câu còn đúng với từ điển hiện tại không), `NotEnoughDataException`.
+  - `ui/panels/QuizPanel`: một class cho cả F9 và F10, App tạo hai object. Có `dictionaryChanged()` nối vào `DictionaryService.addChangeListener`.
+  - `ui/panels/RoundedCard`, `ui/panels/WidthTrackingPanel`: tách từ `RandomPanel` ra để F8 và F9/F10 dùng chung.
+- Bổ sung / khác so với đặc tả:
+  - **Hai nghĩa "trùng nhau"** khi giống nhau sau khi bỏ hoa thường và dấu câu (`meaningKey`: "Laugh out loud!" = "laugh out loud"), vì hai đáp án gần như y hệt trên màn hình cũng là mơ hồ. File gốc có hơn 100 nghĩa dùng chung cho nhiều slang khác tên, nên luật "đáp án nhiễu không được có nghĩa của đề" thật sự cần.
+  - **Chọn đáp án nhiễu:** bốc ngẫu nhiên O(1) (`randomEntry`), bỏ entry không hợp lệ; bốc 64 lần chưa đủ thì duyệt hết từ điển. Thử tối đa 20 entry làm đề; từ điển ≤ 20 entry thì thử hết, nên báo "không đủ dữ liệu" là chắc chắn. 100k slang: câu đầu ~0,5 ms, trung bình ~0,04 ms.
+  - Từ điển đổi (thêm/sửa/xóa/Reset) thì câu **chưa trả lời** được kiểm tra lại bằng `isValid`: chỉ đổi câu khi đáp án đúng không còn đúng hoặc một đáp án nhiễu thành đúng, không tính điểm. Câu đã trả lời và bảng tổng kết giữ nguyên.
+  - Nút đáp án là `JButton` chứa `JTextArea` (đáp án dài tự xuống dòng); `JTextArea` trả `contains = false` để cú bấm rơi xuống nút. Nút đáp án không nhận focus, nên Enter không vô tình chọn đáp án; chọn bằng chuột hoặc phím 1–4 (cả bàn phím số).
+  - Sau khi trả lời: đáp án đúng tô xanh ✓, đáp án chọn sai tô đỏ ✗, các đáp án còn lại mờ đi; slang có nhiều nghĩa thì liệt kê đủ các nghĩa. Từ câu đúng thứ 3 liên tiếp thì khen chuỗi đúng.
+  - Thống kê: CÂU (n hoặc n/10), ĐÚNG (đúng/đã trả lời), CHUỖI ĐÚNG, KỶ LỤC (giữ suốt lúc app chạy, không mất khi chơi lại). Đổi số câu = bắt đầu lượt mới.
+  - Bảng tổng kết: điểm, %, chuỗi đúng dài nhất của lượt, lời nhận xét theo %, danh sách câu sai ("đề → đáp án đúng (bạn chọn: …)"). Enter = chơi lượt mới.
+  - Từ điển không đủ dữ liệu (ví dụ xóa gần hết) thì hiện hướng dẫn thêm slang (Ctrl+4) / khôi phục (Ctrl+7); thêm đủ slang thì tự có câu hỏi.
+- Lỗi tìm ra khi chạy app thật: đổi theme lúc phần thân đang ẩn (bảng tổng kết) thì lần hiện sau còn màu theme cũ, vì FlatLaf chỉ cập nhật component đang nằm trong cửa sổ. Đã sửa: `QuizPanel.updateUI` tự cập nhật các phần thân đang ẩn.
+- Sửa thêm: `SettingsStoreTest` chuyển từ `@TempDir` sang `ScratchDir` (lần chạy cả bộ test bị lỗi dọn thư mục tạm do Windows Defender, đúng lỗi đã ghi ở bước 9).
+- Đã chạy jar thật (harness tự bấm, chụp màn hình): F9 theme tối/tiếng Việt (câu hỏi, chọn sai, chọn đúng), F10 theme sáng/English, lượt 10 câu ra bảng tổng kết, đổi lại theme tối/tiếng Việt trên bảng tổng kết.
 
 ### Bước 13: Hoàn thiện và nộp bài
 

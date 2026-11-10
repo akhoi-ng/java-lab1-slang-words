@@ -10,17 +10,29 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import lab01.slangdict._24127430.model.Theme;
+import lab01.slangdict._24127430.testutil.ScratchDir;
 
 class SettingsStoreTest {
 
     private static final Locale FALLBACK = Locale.forLanguageTag("vi");
 
-    @TempDir
-    Path dir;
+    /** Không dùng @TempDir: xem {@link ScratchDir} (đã gặp lỗi dọn dẹp chập chờn ở chính test này). */
+    private Path dir;
+
+    @BeforeEach
+    void createDir() throws IOException {
+        dir = ScratchDir.create("slangdict-settings");
+    }
+
+    @AfterEach
+    void deleteDir() {
+        ScratchDir.deleteQuietly(dir);
+    }
 
     @Test
     void missingFileGivesDefaults() {
