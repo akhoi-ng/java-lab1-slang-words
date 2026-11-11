@@ -3,6 +3,33 @@
 Ngày audit: 11/11/2026 · commit `1b9e890` (working tree chỉ có `docs/PLAN.md` sửa dở từ trước) · JDK chạy test và repro: 25.0.4.1.
 Audit chỉ đọc: không sửa file nào trong repo; file repro tạm nằm ngoài repo và đã xóa.
 
+## Trạng thái sửa (cập nhật 11/11/2026)
+
+Từ mục 1 trở xuống giữ nguyên như lúc audit (commit `1b9e890`): số dòng, số đo và kịch bản tái hiện là của commit đó. Cách sửa và số đo sau khi sửa ghi trong `docs/ARCHITECTURE.md` và `docs/PLAN.md`.
+
+| Lỗi | Trạng thái | Commit | Ghi chú |
+|---|---|---|---|
+| C1 | Đã sửa | `5d5804d` | Trie ghi phẳng, đọc `.dat` trên luồng stack 16 MB, tên tối đa 100 ký tự, luồng ghi báo cả `Error` |
+| C2 | Đã sửa | `551d64b` | Chỉ build lại khi gặp `DictionaryFormatException`; file hỏng giữ lại thành `dictionary.dat.bad` và có dialog cảnh báo; lỗi I/O khác thì không ghi đè |
+| H1 | Chưa sửa | | |
+| M1 | Đã sửa | `7135a94` | Chỉ giữ khóa lúc `snapshot()` (100k: 80–240 ms), serialize ngoài khóa. 100k khi đang ghi: tìm 0–36 ms, add 0 ms |
+| M2 | Đã sửa | `7135a94` | Chỉ thêm từ mới vào BK-tree từ vựng, build ba nhóm index song song. Reset 100k: 0,46–0,71 s (1 CPU: 0,8–1,25 s) |
+| M3 | Chưa sửa | | |
+| L1–L5 | Chưa sửa | | |
+
+Mục 6 (tài liệu nói khác code):
+
+| Dòng trong mục 6 | Trạng thái |
+|---|---|
+| `PLAN.md:13` bước 12 chưa commit | Chưa sửa |
+| `PLAN.md:15` số commit | Chưa sửa |
+| `ARCHITECTURE.md:120` nhắc tới README | Chưa sửa (chưa có `README.md`) |
+| `ARCHITECTURE.md:299` id không dùng lại | Chưa sửa |
+| `ARCHITECTURE.md:336` `loadOrBuild` bắt mọi `IOException` | Đã sửa cùng C2 (`551d64b`) |
+| `ARCHITECTURE.md:344` `Error` không được báo | Đã sửa cùng C1 (`5d5804d`) |
+| `ARCHITECTURE.md:354`, `PLAN.md:131` số đo `.dat` | Đã đo lại sau C1 (`5d5804d`) và M1/M2 (`7135a94`) |
+| `ARCHITECTURE.md:301` "UI chỉ đọc/sửa trên một luồng" | Đã sửa (chưa commit) |
+
 ## 1. Tóm tắt
 
 **Kiến trúc.** App Swing + FlatLaf, Java 17, Maven, fat-jar `target/slang-dictionary.jar`. Luồng dữ liệu:

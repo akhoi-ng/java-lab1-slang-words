@@ -299,7 +299,7 @@ idList = [5, 8, 2, 9]   xóa 8 (vị trí 1)
 
 **Id:** `build` giữ nguyên id từ file (0, 1, 2, ...); `add` cấp `nextId` rồi tăng lên. Id không bao giờ dùng lại, nên lịch sử hay entry đang chọn trên UI không bao giờ trỏ nhầm sang entry khác.
 
-**Đa luồng (`synchronized`):** UI chỉ đọc/sửa trên một luồng (EDT), nhưng luồng ghi nền (mục 4.8) lại serialize từ điển cùng lúc. Nếu đang serialize mà EDT xóa một entry thì file có thể chứa trạng thái "nửa vời" (đã xóa khỏi `entries` nhưng vẫn còn trong Trie). Cách giải quyết: `writeObject` và `add/replace/remove` cùng `synchronized` trên chính object từ điển, giống cách `java.util.Vector` làm. Đang ghi thì thao tác sửa phải chờ, và ngược lại. Test `savingWhileEditingNeverWritesHalfUpdatedData` kiểm tra đúng tình huống này.
+**Đa luồng (`synchronized`):** UI chỉ sửa trên một luồng (EDT), nhưng luồng ghi nền (mục 4.8) đọc từ điển cùng lúc để ghi file. Nếu đang chép mà EDT xóa một entry thì file có thể chứa trạng thái "nửa vời" (đã xóa khỏi `entries` nhưng vẫn còn trong Trie). Cách giải quyết: `snapshot()`, `writeObject` và `add/replace/remove` cùng `synchronized` trên chính object từ điển, giống cách `java.util.Vector` làm. Luồng ghi chỉ giữ khóa trong lúc chép (`snapshot()`, 100k: tối đa ~200 ms) rồi serialize bản chép ngoài khóa, nên thao tác sửa chỉ phải chờ phần chép. Test `savingWhileEditingNeverWritesHalfUpdatedData` kiểm tra đúng tình huống này.
 
 ### 4.8 `io/AppPaths` và `io/DictionaryStore`: lưu index xuống file
 
