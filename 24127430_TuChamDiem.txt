@@ -3,7 +3,7 @@ CSC13002 - LẬP TRÌNH ỨNG DỤNG JAVA
 
 MSSV      : 24127430
 Họ tên    : Nguyễn Anh Khôi
-Video demo: <DÁN LINK YOUTUBE>
+Video demo: https://youtu.be/KZ_-wzcou_Q
 Source    : https://github.com/akhoi-ng/java-lab1-slang-words
 
 =====================================================================
@@ -51,7 +51,7 @@ NỘI DUNG BÀI NỘP
 - source/                 : mã nguồn (Maven project)
 - slang-dictionary.jar    : chương trình (java -jar slang-dictionary.jar, cần Java 17+)
 - slang.txt               : file dữ liệu (bản này đã nhúng sẵn trong file jar)
-- commits.png             : hình chụp lịch sử commit
+- commits_evidence/       : hình chụp lịch sử commit (1.png, 2.png, 3.png)
 - 24127430_TuChamDiem.txt : file này
 
 =====================================================================
