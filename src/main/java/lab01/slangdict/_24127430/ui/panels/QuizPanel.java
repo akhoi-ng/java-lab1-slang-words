@@ -313,6 +313,10 @@ public class QuizPanel extends JPanel implements FeatureScreen {
                 return this;
             }
         });
+        // JComboBox mặc định nhảy tới mục có chữ bắt đầu bằng phím vừa gõ: combo đang giữ focus mà nhấn 1 / 2 thì
+        // nhảy sang "10 câu" / "20 câu" và bắt đầu lượt mới, mất câu vừa trả lời. Tắt đi để phím 1–4 luôn là chọn
+        // đáp án (key binding của màn hình vẫn chạy khi focus nằm ở combo).
+        modeCombo.setKeySelectionManager((key, model) -> -1);
         modeCombo.addActionListener(e -> onModeSelected());
         modeLabel.setLabelFor(modeCombo);
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
@@ -630,6 +634,10 @@ public class QuizPanel extends JPanel implements FeatureScreen {
 
     QuizQuestion currentQuestion() {
         return question;
+    }
+
+    JComboBox<Integer> roundLengthCombo() {
+        return modeCombo;
     }
 
     int chosenIndex() {

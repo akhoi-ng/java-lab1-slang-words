@@ -31,6 +31,7 @@ import lab01.slangdict._24127430.service.RandomService;
 import lab01.slangdict._24127430.ui.Feature;
 import lab01.slangdict._24127430.ui.FeatureScreen;
 import lab01.slangdict._24127430.ui.NumberBadgeIcon;
+import lab01.slangdict._24127430.ui.PlainText;
 import lab01.slangdict._24127430.ui.ThemeManager;
 
 /**
@@ -62,7 +63,7 @@ public class RandomPanel extends JPanel implements FeatureScreen {
     private final JLabel title = new JLabel();
     private final JLabel subtitle = new JLabel();
     private final JLabel kindLabel = new JLabel();
-    private final JLabel slangLabel = new JLabel();
+    private final JLabel slangLabel = PlainText.of(new JLabel()); // tên slang hiện nguyên văn, kể cả "<html>…"
     private final JLabel countLabel = new JLabel();
     private final JTextArea meaningsText = new JTextArea();
     private final JButton randomButton = new JButton();
@@ -306,6 +307,10 @@ public class RandomPanel extends JPanel implements FeatureScreen {
 
     SlangEntry shownEntry() {
         return shown;
+    }
+
+    JLabel slangLabel() {
+        return slangLabel;
     }
 
     boolean showingToday() {

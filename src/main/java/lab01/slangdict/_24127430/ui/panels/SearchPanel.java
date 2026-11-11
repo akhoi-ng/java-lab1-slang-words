@@ -35,6 +35,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import javax.swing.AbstractAction;
+import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.DefaultListCellRenderer;
@@ -75,6 +76,7 @@ import lab01.slangdict._24127430.service.SearchService;
 import lab01.slangdict._24127430.ui.Feature;
 import lab01.slangdict._24127430.ui.FeatureScreen;
 import lab01.slangdict._24127430.ui.NumberBadgeIcon;
+import lab01.slangdict._24127430.ui.PlainText;
 import lab01.slangdict._24127430.ui.Sidebar;
 import lab01.slangdict._24127430.ui.ThemeManager;
 
@@ -170,7 +172,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     // ----- bảng kết quả + chi tiết -----
     private final ResultTableModel tableModel = new ResultTableModel();
     private final JTable table = new JTable(tableModel);
-    private final JLabel detailTitle = new JLabel();
+    private final JLabel detailTitle = PlainText.of(new JLabel()); // tên slang hiện nguyên văn, kể cả "<html>…"
     private final JLabel detailCount = new JLabel();
     private final JTextArea detailText = new JTextArea();
 
@@ -901,7 +903,8 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             suggestLabel.setText(Messages.get("search.suggest"));
             suggestionPanel.add(suggestLabel);
             for (String suggestion : shownSuggestions) {
-                JButton link = new JButton(suggestion);
+                JButton link = PlainText.of(new JButton());
+                link.setText(suggestion);
                 link.putClientProperty("JButton.buttonType", "borderless");
                 link.setForeground(ThemeManager.accentColor());
                 link.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -1114,6 +1117,21 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         return detailText.getText();
     }
 
+    JLabel detailTitleLabel() {
+        return detailTitle;
+    }
+
+    /** Các nút gợi ý "Có phải bạn muốn tìm" đang hiện. */
+    List<AbstractButton> suggestionButtons() {
+        List<AbstractButton> buttons = new ArrayList<>();
+        for (Component component : suggestionPanel.getComponents()) {
+            if (component instanceof AbstractButton button) {
+                buttons.add(button);
+            }
+        }
+        return buttons;
+    }
+
     /** Thông báo đang hiện ("" nếu không có). */
     String noticeText() {
         return noticeLabel.getText();
@@ -1198,15 +1216,19 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     }
     // [HẾT THAM KHẢO]
 
-    /** Ô bị cắt bớt ("…") thì rê chuột vào sẽ thấy đủ nội dung. */
+    /** Ô bị cắt bớt ("…") thì rê chuột vào sẽ thấy đủ nội dung. Ô và tooltip đều hiện chữ nguyên văn. */
     private static final class TooltipCellRenderer extends DefaultTableCellRenderer {
+        TooltipCellRenderer() {
+            PlainText.of(this);
+        }
+
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
                                                        boolean focused, int row, int column) {
             super.getTableCellRendererComponent(table, value, selected, focused, row, column);
             String text = value == null ? "" : value.toString();
             int width = table.getColumnModel().getColumn(column).getWidth();
-            setToolTipText(getFontMetrics(getFont()).stringWidth(text) > width - 8 ? text : null);
+            setToolTipText(getFontMetrics(getFont()).stringWidth(text) > width - 8 ? PlainText.tooltip(text) : null);
             return this;
         }
     }

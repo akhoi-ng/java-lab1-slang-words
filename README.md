@@ -83,7 +83,7 @@ Không cần cài Maven (đã có Maven Wrapper):
 ./mvnw package            (Linux/macOS)
 ```
 
-Lệnh này biên dịch, chạy 262 unit test (JUnit 5) và tạo `target/slang-dictionary.jar` (đã gộp FlatLaf, chạy độc lập).
+Lệnh này biên dịch, chạy 272 unit test (JUnit 5) và tạo `target/slang-dictionary.jar` (đã gộp FlatLaf, chạy độc lập).
 
 Cấu trúc mã nguồn (package `lab01.slangdict._24127430`):
 
@@ -137,7 +137,7 @@ Mọi chỗ tham khảo đều được đánh dấu trong code, tìm bằng t�
 | `pom.xml` (maven-shade-plugin) | Tài liệu maven-shade-plugin, "Executable JAR" |
 
 **Cách tính:** đếm dòng code (không tính dòng trống và chú thích) nằm trong các file/đoạn đánh dấu ở trên, chia cho
-tổng số dòng code của `src/main/java`: 928 / 7.101 ≈ 13%. Làm tròn lên **15%** để tính cả phần cấu hình `pom.xml`
+tổng số dòng code của `src/main/java`: 928 / 7.153 ≈ 13%. Làm tròn lên **15%** để tính cả phần cấu hình `pom.xml`
 và các chỗ dùng API theo Javadoc không đánh dấu từng dòng. Phần còn lại (logic từ điển, tìm kiếm và xếp hạng, lưu
 trữ, thêm/sửa/xóa, lịch sử, random, đố vui, giao diện các màn hình, unit test) là phần tự làm.
 

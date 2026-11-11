@@ -1,5 +1,6 @@
 package lab01.slangdict._24127430.ui.panels;
 
+import static lab01.slangdict._24127430.testutil.SwingHtml.rendersHtml;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -166,6 +167,16 @@ class RandomPanelTest {
         onEdt(() -> Messages.setLocale(Messages.ENGLISH));
         assertTrue(get(panel::subtitleText).startsWith("Wednesday, November 11, 2026"), get(panel::subtitleText));
         assertEquals("SLANG OF THE DAY", get(panel::kindText));
+    }
+
+    @Test
+    void aSlangStartingWithAnHtmlTagIsShownAsPlainText() throws Exception {
+        String name = "<html><font size=7>big";
+        dictionary.set(SlangDictionary.build(List.of(new SlangEntry(0, name, List.of("meaning")))));
+        onEdt(panel::dictionaryChanged);
+        open();
+        assertEquals(name, get(() -> panel.slangLabel().getText()));
+        assertFalse(get(() -> rendersHtml(panel.slangLabel())));
     }
 
     // ===================== Hỗ trợ =====================

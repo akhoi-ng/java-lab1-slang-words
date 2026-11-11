@@ -41,6 +41,19 @@ Mục 6 (tài liệu nói khác code):
 | `ARCHITECTURE.md:354`, `PLAN.md:131` số đo `.dat` | Đã đo lại sau C1 (`5d5804d`) và M1/M2 (`7135a94`) |
 | `ARCHITECTURE.md:301` "UI chỉ đọc/sửa trên một luồng" | Đã sửa (`5ece2d5`) |
 
+Mục 7 (nghi vấn chưa kiểm chứng), kiểm chứng ngày 11/11/2026 sau commit `f9373d0`. Chương trình thử (ngoài repo) dựng `QuizPanel` thật từ jar và gửi phím qua `KeyboardFocusManager.redispatchEvent`, đúng đường đi của phím khi component giữ focus:
+
+| Nghi vấn | Kết quả | Ghi chú |
+|---|---|---|
+| Hai instance cùng ghi `dictionary.dat.tmp` | Không còn xảy ra | `InstanceLock` (L2) chỉ cho một process dùng mỗi thư mục `data/` |
+| Jar cũ hơn source | **Đúng** | Jar trên đĩa build 02:57, trước mọi commit sửa lỗi, không có `InstanceLock.class`. Đã build lại và chạy thử ở thư mục sạch |
+| Ngưỡng tràn stack C1 trên JRE 17 | Không còn liên quan | C1 đã sửa: Trie ghi phẳng, tên tối đa 100 ký tự |
+| Quiz: combo số câu giữ focus, nhấn 1–4 | **Đúng, đã sửa** | `JComboBox` nhảy tới mục bắt đầu bằng phím gõ: "1" → 10 câu, "2" → 20 câu, lượt bắt đầu lại, mất câu vừa trả lời. Sửa: `setKeySelectionManager((key, model) -> -1)`, phím 1–4 vẫn chọn đáp án. Test `QuizPanelTest.digitKeysTypedIntoTheRoundLengthComboAnswerInsteadOfStartingANewRound` |
+| Slang/nghĩa bắt đầu bằng `<html>` | **Đúng, đã sửa** | `validate` cho qua; `JLabel`, nút gợi ý, ô bảng (kết quả, lịch sử, bảng nghĩa) và tooltip vẽ thành HTML. Sửa: lớp `ui/PlainText` đặt `"html.disable"`, tooltip thoát ký tự. Test `PlainTextTest` + 4 test màn hình |
+| Khởi động 100k khoảng 2 s có bị coi là chậm | Không đổi | Không thuộc 10 chức năng; có màn hình "Đang tải…", giao diện không đứng |
+
+Sau khi sửa: `.\mvnw.cmd package` 272/272 test pass, jar build lại lúc 14:24 ngày 11/11.
+
 ## 1. Tóm tắt
 
 **Kiến trúc.** App Swing + FlatLaf, Java 17, Maven, fat-jar `target/slang-dictionary.jar`. Luồng dữ liệu:

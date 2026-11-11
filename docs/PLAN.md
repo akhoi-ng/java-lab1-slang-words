@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–13** (bước 13 🟡 chờ commit); đã sửa mọi lỗi trong `AUDIT_REPORT.md`. Còn các việc ngoài repo ở checklist mục 6 (video, hình commit, zip) |
-| Test | 262/262 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 26 commit trên 6 ngày (tính tới commit sửa L1, L2, L5): 04/11 (1), 05/11 (1), 08/11 (1), 09/11 (3), 10/11 (6), 11/11 (14) → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày). Đếm lại bằng `git rev-list --count HEAD` |
+| Bước đang ở | **Xong và đã commit bước 0–13** (bước 13: `f9373d0`); đã sửa mọi lỗi C/H/M/L trong `AUDIT_REPORT.md` và 2 lỗi tìm ra khi kiểm chứng mục 7 của audit (🟡 chờ commit). Jar build lại lúc 14:24 ngày 11/11. Còn các việc ngoài repo ở checklist mục 6 (video, điền file tự chấm, hình commit, zip) |
+| Test | 272/272 pass (`.\mvnw.cmd package`, 11/11 14:24) |
+| Commit đã có | 27 commit trên 6 ngày (tính tới `f9373d0`): 04/11 (1), 05/11 (1), 08/11 (1), 09/11 (3), 10/11 (6), 11/11 (15) → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày). Đếm lại bằng `git rev-list --count HEAD` |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -60,7 +60,7 @@
 | 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ✅ 11/11 |
 | 11 | Reset + Random | **F7, F8** | ✅ 11/11 |
 | 12 | Quiz (2 loại) | **F9, F10** | ✅ 11/11 |
-| 13 | README, file tự chấm điểm, đánh dấu tham khảo, jar cuối | nộp bài | 🟡 11/11 |
+| 13 | README, file tự chấm điểm, đánh dấu tham khảo, jar cuối | nộp bài | ✅ 11/11 |
 
 ### Lịch commit đề xuất
 
@@ -69,16 +69,21 @@
 | 04/11, 05/11, 08/11 | đã có | 3 |
 | 09/11 | bước 1, 2, 3 | 3 ✅ |
 | 10/11 | bước 4 → 7 + docs | 6 ✅ |
-| **11/11** | bước 8 → 13 | ~6 |
-| Tổng | | ~18 commit trên 6 ngày ✓ |
+| **11/11** | bước 8 → 13 + audit và sửa lỗi audit | 15 ✅ |
+| Tổng | | 27 commit trên 6 ngày ✓ |
 
 ---
 
 ## 3. Việc cần làm NGAY
 
 1. ~~Đối chiếu ARCHITECTURE.md với code bước 4–5~~ → đã xong 10/11 (thêm mục 4.6–4.8, bảng test, khái niệm đa luồng).
-2. ~~Dùng prompt của bước 6 → 12~~ → xong. Commit bước 12 rồi dùng prompt của **bước 13** (mục 5 bên dưới).
+2. ~~Dùng prompt của bước 6 → 13~~ → xong, đã commit hết.
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
+4. ~~Sửa 2 lỗi nhỏ tìm ra ở mục 7 của audit~~ → đã sửa kèm test, jar build lại 14:24 (ghi ở bước 13). Còn commit.
+5. Quay video, upload YouTube (Unlisted hoặc Public, không để Private).
+6. Điền họ tên + link video vào `24127430_TuChamDiem.txt`, commit.
+7. Sau commit cuối mới chụp hình lịch sử commit (`commits.png`), rồi nén zip theo checklist mục 6.
+8. Xem lại deadline trên Moodle.
 
 ---
 
@@ -353,6 +358,14 @@ Các method:
 - Chụp hình lịch sử commit (`git log` hoặc trang commits trên GitHub)
 - Đóng gói `24127430_<điểm>.zip` theo mục IV.8 (checklist ở mục 6)
 - **Đã làm (11/11):** `README.md`; `24127430_TuChamDiem.txt` (tự chấm 100/100, còn trống họ tên và link video); đánh dấu tham khảo trong code bằng `[THAM KHẢO - CẢ FILE]` (đầu file) và `[THAM KHẢO]`…`[HẾT THAM KHẢO]` (đoạn), nguồn liệt kê ở README mục 6. Đếm dòng code (không tính dòng trống, chú thích) trong phần đánh dấu: 928 / 7.101 ≈ 13%, khai **15%** (làm tròn lên cho `pom.xml` và các chỗ dùng API theo Javadoc). Theo lời thầy, code do AI viết được phép và không tính vào %, chỉ tính code của người khác/nguồn khác. `.\mvnw.cmd package`: 262/262 test pass; chạy jar ở thư mục khác có dấu cách: lần đầu build từ text 85 ms, lần sau đọc `.dat` 202 ms.
+- **Kiểm tra lại trước khi nộp (11/11, 13:48):**
+  - `target/slang-dictionary.jar` trên đĩa là bản **cũ** (build 02:57, trước mọi commit sửa lỗi audit, không có `InstanceLock.class`). Đã chạy `.\mvnw.cmd package`: 262/262 pass, jar mới có đủ các sửa đổi. Class file version 61 (Java 17), manifest `Main-Class` đúng, FlatLaf và `data/slang.txt` nằm trong jar.
+  - Chạy jar mới trong một thư mục sạch có dấu cách: build từ text 155 ms, tạo `data/dictionary.dat` và `data/app.lock`.
+  - Benchmark 100k lần này chậm hơn số trong README (máy đang chạy cả bộ test): tệ nhất SLANG SUBSTRING `"o"` 453 ms, DEFINITION SUBSTRING `"e"` 366 ms, build index 2,4 s. Vẫn dưới 1 s.
+- **Kiểm chứng 2 nghi vấn ở mục 7 của audit** (chương trình thử dựng `QuizPanel` thật từ jar, gửi phím vào component; nằm ngoài repo):
+  - **Quiz, combo "số câu" đang giữ focus rồi nhấn phím 1/2: lỗi có thật, đã sửa.** Focus ở panel: phím 1 chọn đáp án 1 (`answered=1`). Focus ở combo: `JComboBox` tự nhảy tới mục có chữ bắt đầu bằng "1" (tức 10 câu; phím 2 → 20 câu), lượt bị bắt đầu lại, câu vừa trả lời và điểm mất (`combo=10, answered=0`). Gặp khi bấm mở combo rồi đóng mà không đổi mục, hoặc Tab tới combo. **Đã sửa:** `modeCombo.setKeySelectionManager((key, model) -> -1)`, phím 1–4 vẫn chọn đáp án qua key binding của panel (chạy lại chương trình thử trên jar mới: `combo=0, answered=1`). Test mới trong `QuizPanelTest`.
+  - **Tên/nghĩa bắt đầu bằng `<html>`: lỗi có thật, mức thấp, đã sửa.** `DictionaryService.validate("<html><font color=red size=7>BIG</font>", …)` cho qua; `JLabel` (`SearchPanel.detailTitle`, `RandomPanel.slangLabel`), nút gợi ý, renderer của bảng (kết quả, lịch sử, bảng nghĩa trong dialog) và tooltip đều vẽ thành HTML (cao 47 px thay vì 16 px). Các dialog (`ConflictDialog`, `ResetDialog`, `EntryActions`) đã escape nên không bị. **Đã sửa:** lớp mới `ui/PlainText` (`of` đặt `"html.disable"`, `cellRenderer`, `tooltip` thoát ký tự), giải thích ở ARCHITECTURE mục 4.17. Test mới: `PlainTextTest` (5) + mỗi màn hình một test (Search, History, Random, dialog Thêm/Sửa). Viết test trước, chạy thấy fail đúng lý do, sửa xong thì pass.
+  - Sau khi sửa: `.\mvnw.cmd package` 272/272 pass, jar build lại 14:24, chạy jar trong thư mục sạch: build từ text 123 ms. Code tự viết thêm nằm ngoài các đoạn `[THAM KHẢO]`, nên tỉ lệ tham khảo thành 928 / 7.153 ≈ 13% (vẫn khai 15%).
 
 ---
 
@@ -401,12 +414,15 @@ và docs/ARCHITECTURE.md trước khi code.
 
 ## 6. Checklist nộp bài (mục IV của đề)
 
-- [x] ≥ 10 commit trải trên ≥ 5 ngày (26 commit / 6 ngày)
+- [x] ≥ 10 commit trải trên ≥ 5 ngày (27 commit / 6 ngày)
 - [x] 10 chức năng chạy đúng, mỗi chức năng < 1s với 100k slang
-- [x] `target/slang-dictionary.jar` chạy được bằng double-click / `java -jar` (build lại 11/11 sau bước 13)
+- [x] `target/slang-dictionary.jar` chạy được bằng double-click / `java -jar` (build lại 11/11 14:24 sau khi sửa mục 7 của audit; **có commit code mới thì phải build lại**)
 - [x] File data (`slang.txt`)
 - [ ] Hình chụp lịch sử commit
 - [ ] File `.txt` tự chấm điểm từng chức năng + link video YouTube (`24127430_TuChamDiem.txt` đã có, **còn điền họ tên + link video**)
 - [ ] Video YouTube: cấu trúc dữ liệu, % tham khảo, demo trọn một chức năng
 - [x] Đánh dấu phần tham khảo trong code + khai tổng % tham khảo (15%, README mục 6)
-- [ ] Đặt tên file nộp `24127430_<điểm>.zip`, gồm source code, jar, data, hình commit, file txt
+- [ ] Đặt tên file nộp `24127430_<điểm>.zip`, gồm source code, jar, data, hình commit, file txt:
+  - `source/`: `src/`, `pom.xml`, `mvnw`, `mvnw.cmd`, `.mvn/`, `README.md`, `docs/`. Không nén `target/` và `data/`
+  - `slang-dictionary.jar` (bản build mới nhất), `slang.txt`, `commits.png`, `24127430_TuChamDiem.txt`
+  - Giải nén ra thư mục khác rồi double-click jar thử một lần trước khi nộp

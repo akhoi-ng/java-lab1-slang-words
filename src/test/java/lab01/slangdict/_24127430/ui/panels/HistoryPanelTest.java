@@ -1,5 +1,6 @@
 package lab01.slangdict._24127430.ui.panels;
 
+import static lab01.slangdict._24127430.testutil.SwingHtml.cellRendersHtml;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -189,6 +190,21 @@ class HistoryPanelTest {
         assertEquals("BRB", search.get().table().getValueAt(0, 0));
         assertEquals(Feature.SEARCH_DEFINITION, navigated.get(navigated.size() - 1));
         assertEquals(1, history.size(), "searching the same thing again only refreshes the latest row");
+    }
+
+    @Test
+    void aQueryStartingWithAnHtmlTagIsShownAsPlainText() throws Exception {
+        String query = "<html><font size=7>big";
+        addOnEdt(SearchTarget.SLANG, SearchMode.EXACT, query, 0);
+        flushEdt();
+        assertEquals(query, cell(0, panel.table().getColumnCount() - 1));
+        AtomicReference<Boolean> anyHtml = new AtomicReference<>(false);
+        onEdt(() -> {
+            for (int column = 0; column < panel.table().getColumnCount(); column++) {
+                anyHtml.set(anyHtml.get() || cellRendersHtml(panel.table(), 0, column));
+            }
+        });
+        assertFalse(anyHtml.get());
     }
 
     private static void onEdt(Runnable action) throws InterruptedException, InvocationTargetException {

@@ -39,6 +39,7 @@ import lab01.slangdict._24127430.service.HistoryService;
 import lab01.slangdict._24127430.ui.Feature;
 import lab01.slangdict._24127430.ui.FeatureScreen;
 import lab01.slangdict._24127430.ui.NumberBadgeIcon;
+import lab01.slangdict._24127430.ui.PlainText;
 import lab01.slangdict._24127430.ui.ThemeManager;
 
 /**
@@ -141,6 +142,7 @@ public class HistoryPanel extends JPanel implements FeatureScreen {
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION); // Ctrl/Shift để xóa nhiều dòng
         table.setFillsViewportHeight(true);
         table.getTableHeader().setReorderingAllowed(false);
+        table.setDefaultRenderer(Object.class, PlainText.cellRenderer()); // từ khóa đã tìm hiện nguyên văn
         int[] widths = {180, 110, 110, 420};
         for (int i = 0; i < widths.length; i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);

@@ -42,6 +42,7 @@ import lab01.slangdict._24127430.i18n.Messages;
 import lab01.slangdict._24127430.model.Theme;
 import lab01.slangdict._24127430.service.DictionaryService;
 import lab01.slangdict._24127430.ui.NumberBadgeIcon;
+import lab01.slangdict._24127430.ui.PlainText;
 import lab01.slangdict._24127430.ui.ThemeManager;
 
 /**
@@ -244,6 +245,7 @@ public final class EntryEditorDialog {
             table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE); // bấm Lưu khi đang gõ dở vẫn giữ chữ
             table.setFillsViewportHeight(true);
             table.getTableHeader().setReorderingAllowed(false);
+            table.setDefaultRenderer(String.class, PlainText.cellRenderer()); // nghĩa hiện nguyên văn
             table.getColumnModel().getColumn(0).setMaxWidth(40);
             table.getColumnModel().getColumn(0).setPreferredWidth(32);
             table.getSelectionModel().addListSelectionListener(e -> updateButtons());

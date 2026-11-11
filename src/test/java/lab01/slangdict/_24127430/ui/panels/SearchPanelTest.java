@@ -1,5 +1,7 @@
 package lab01.slangdict._24127430.ui.panels;
 
+import static lab01.slangdict._24127430.testutil.SwingHtml.cellRendersHtml;
+import static lab01.slangdict._24127430.testutil.SwingHtml.rendersHtml;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -261,6 +263,33 @@ class SearchPanelTest {
         // nhiều từ khóa: tô từng từ; ký tự đặc biệt của regex không gây lỗi
         assertEquals(List.of("0-8", "13-17"), ranges("Laughing out loud", SearchMode.EXACT, "loud laughing"));
         assertFalse(ranges("a+b", SearchMode.SUBSTRING, "a+b").isEmpty());
+    }
+
+    @Test
+    void slangAndMeaningsStartingWithHtmlTagsAreShownAsPlainText() throws Exception {
+        String name = "<html><font size=7>big";
+        String meaning = "<html><i>tag</i> meaning";
+        SlangDictionary dictionary = SlangDictionary.build(List.of(new SlangEntry(0, name, List.of(meaning))));
+        onEdt(() -> panel = new SearchPanel(new SearchService(() -> dictionary), navigated::add, Runnable::run));
+
+        onEdt(() -> panel.search(SearchTarget.SLANG, SearchMode.EXACT, name));
+        flushEdt();
+        assertEquals(List.of(name), slangColumn());
+        onEdt(() -> panel.selectRow(0));
+        assertEquals(name, panel.detailTitleLabel().getText());
+        assertFalse(rendersHtml(panel.detailTitleLabel()), "detail title");
+        onEdt(() -> {
+            assertFalse(cellRendersHtml(panel.table(), 0, 0), "slang cell");
+            assertFalse(cellRendersHtml(panel.table(), 0, 1), "meaning cell");
+        });
+
+        // Gõ sai một ký tự: gợi ý "Có phải bạn muốn tìm" là một nút mang đúng tên slang
+        onEdt(() -> panel.search(SearchTarget.SLANG, SearchMode.EXACT, "<html><font size=7>bi"));
+        flushEdt();
+        assertEquals(List.of(name), panel.shownSuggestions());
+        assertEquals(1, panel.suggestionButtons().size());
+        assertEquals(name, panel.suggestionButtons().get(0).getText());
+        assertFalse(rendersHtml(panel.suggestionButtons().get(0)), "suggestion button");
     }
 
     // ---------------- tiện ích ----------------

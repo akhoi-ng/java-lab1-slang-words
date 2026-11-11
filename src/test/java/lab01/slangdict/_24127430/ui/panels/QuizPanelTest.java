@@ -8,12 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -151,6 +153,26 @@ class QuizPanelTest {
         int numpad = KeyEvent.VK_NUMPAD1 + (second.correctIndex() + 1) % 4; // phím số bên phải cũng được
         onEdt(() -> runKey(KeyStroke.getKeyStroke(numpad, 0)));
         assertEquals((second.correctIndex() + 1) % 4, get(panel::chosenIndex));
+    }
+
+    @Test
+    void digitKeysTypedIntoTheRoundLengthComboAnswerInsteadOfStartingANewRound() throws Exception {
+        open();
+        QuizQuestion q = question();
+        JComboBox<Integer> combo = get(panel::roundLengthCombo);
+
+        // Combo số câu đang giữ focus (vừa mở rồi đóng mà không đổi mục, hoặc Tab tới): JComboBox mặc định nhảy tới
+        // mục có chữ bắt đầu bằng phím vừa gõ ("1" → 10 câu), làm lượt chơi bắt đầu lại và mất câu vừa trả lời.
+        onEdt(() -> typeKey(combo, KeyEvent.VK_1, '1'));
+        assertEquals(0, get(panel::chosenIndex), "key 1 chooses the first option");
+        assertEquals(1, get(panel::answeredCount));
+        assertSame(q, question());
+        assertEquals(0, get(combo::getSelectedItem), "still an endless round");
+
+        onEdt(() -> typeKey(combo, KeyEvent.VK_2, '2'));
+        assertEquals(0, get(combo::getSelectedItem), "key 2 does not switch to 20 questions");
+        assertEquals(1, get(panel::answeredCount));
+        assertEquals(0, get(panel::chosenIndex));
     }
 
     @Test
@@ -339,6 +361,19 @@ class QuizPanelTest {
         Object name = panel.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key);
         assertNotNull(name, "no binding for " + key);
         panel.getActionMap().get(name).actionPerformed(null);
+    }
+
+    /**
+     * Gõ một phím vào {@code target} như khi nó đang giữ focus: đủ 3 sự kiện nhấn / gõ / nhả, đi qua key binding của
+     * các component cha lẫn KeyListener của chính nó (bộ chọn mục theo phím của JComboBox nằm ở đây).
+     */
+    private static void typeKey(JComponent target, int keyCode, char keyChar) {
+        KeyboardFocusManager manager = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        long when = System.currentTimeMillis();
+        manager.redispatchEvent(target, new KeyEvent(target, KeyEvent.KEY_PRESSED, when, 0, keyCode, keyChar));
+        manager.redispatchEvent(target, new KeyEvent(target, KeyEvent.KEY_TYPED, when, 0, KeyEvent.VK_UNDEFINED,
+                keyChar));
+        manager.redispatchEvent(target, new KeyEvent(target, KeyEvent.KEY_RELEASED, when, 0, keyCode, keyChar));
     }
 
     private static void onEdt(Runnable action) throws Exception {

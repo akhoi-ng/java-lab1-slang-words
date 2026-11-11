@@ -1,5 +1,6 @@
 package lab01.slangdict._24127430.ui.dialogs;
 
+import static lab01.slangdict._24127430.testutil.SwingHtml.cellRendersHtml;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -175,6 +176,14 @@ class EntryDialogsTest {
     @Test
     void htmlSpecialCharactersAreShownLiterally() {
         assertEquals("&lt;3 &amp; &gt;_&lt;", ConflictDialog.escape("<3 & >_<"));
+    }
+
+    @Test
+    void meaningsStartingWithAnHtmlTagAreShownAsPlainText() throws Exception {
+        String meaning = "<html><font size=7>big";
+        EntryEditorDialog.Form form = form(true, new Draft("x", List.of(meaning)));
+        assertEquals(List.of(meaning), get(form::meaningRows));
+        assertFalse(get(() -> cellRendersHtml(form.table(), 0, 1)));
     }
 
     // ===================== Tiện ích =====================
