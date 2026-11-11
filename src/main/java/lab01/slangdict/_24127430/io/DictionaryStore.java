@@ -75,8 +75,11 @@ public class DictionaryStore implements AutoCloseable {
      * thay vì được khởi tạo (phòng lỗi bảo mật kinh điển của Java deserialization).
      * maxarray chặn file hỏng khai báo collection khổng lồ làm tràn bộ nhớ (100k slang chỉ cần cỡ 10^5–10^6).
      */
+    // [THAM KHẢO] Cú pháp pattern của bộ lọc deserialization theo Oracle, "Serialization Filtering"
+    //   https://docs.oracle.com/en/java/javase/17/core/serialization-filtering1.html
     private static final ObjectInputFilter CLASS_FILTER = ObjectInputFilter.Config.createFilter(
             "maxarray=20000000;lab01.slangdict._24127430.**;java.util.*;java.lang.*;!*");
+    // [HẾT THAM KHẢO]
 
     private static final long FLUSH_TIMEOUT_SECONDS = 30;
     /**
@@ -198,6 +201,10 @@ public class DictionaryStore implements AutoCloseable {
         T run() throws IOException;
     }
 
+    // [THAM KHẢO] Chạy việc đệ quy sâu trên luồng có stack lớn hơn, dùng constructor
+    //   Thread(ThreadGroup, Runnable, String, long stackSize):
+    //   https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html
+    //   Tự viết: chuyển kết quả/ngoại lệ về luồng gọi.
     /** Chạy {@code task} trên một luồng mới có stack {@link #LARGE_STACK_BYTES}, chờ xong rồi trả kết quả. */
     private static <T> T onLargeStack(String name, IoTask<T> task) throws IOException {
         AtomicReference<T> result = new AtomicReference<>();
@@ -228,6 +235,7 @@ public class DictionaryStore implements AutoCloseable {
         }
         return result.get();
     }
+    // [HẾT THAM KHẢO]
 
     static byte[] serialize(SlangDictionary dictionary) throws IOException {
         ByteArrayOutputStream payload = new ByteArrayOutputStream(1 << 20);
@@ -297,6 +305,10 @@ public class DictionaryStore implements AutoCloseable {
         }
     }
 
+    // [THAM KHẢO] Mẫu ghi file an toàn "ghi file tạm, force xuống đĩa, rồi đổi tên đè (ATOMIC_MOVE)", theo Javadoc
+    //   https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/nio/file/Files.html#move(java.nio.file.Path,java.nio.file.Path,java.nio.file.CopyOption...)
+    //   https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/nio/channels/FileChannel.html#force(boolean)
+    //   Tự viết: thử lại khi Windows báo AccessDeniedException, lùi về move thường khi không hỗ trợ ATOMIC_MOVE.
     /** Ghi ra file .tmp cạnh file đích, ép xuống đĩa, rồi đổi tên đè lên file đích. */
     static void writeAtomically(byte[] bytes, Path file) throws IOException {
         Path target = file.toAbsolutePath();
@@ -336,6 +348,7 @@ public class DictionaryStore implements AutoCloseable {
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
+    // [HẾT THAM KHẢO]
 
     // ===================== Khởi động / Reset =====================
 

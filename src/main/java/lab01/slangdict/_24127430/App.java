@@ -107,6 +107,8 @@ public final class App {
         LoadingWindow loading = new LoadingWindow();
         loading.showDelayed();
 
+        // [THAM KHẢO] Mẫu SwingWorker: doInBackground chạy luồng nền, done() + get() trên EDT, theo Oracle Java Tutorials,
+        //   "Worker Threads and SwingWorker" https://docs.oracle.com/javase/tutorial/uiswing/concurrency/worker.html
         new SwingWorker<DictionaryStore.LoadResult, Void>() {
             @Override
             protected DictionaryStore.LoadResult doInBackground() throws Exception {
@@ -127,6 +129,7 @@ public final class App {
                     fatal(e.getCause());
                     return;
                 }
+                // [HẾT THAM KHẢO]
                 System.out.printf("[App] Loaded %,d slang words (%s) in %d ms%n",
                         loaded.dictionary().size(), loaded.source(), loaded.elapsedMillis());
                 mainFrame = new MainFrame(settings, loaded, store.dictionaryFile().getParent(), VERSION,

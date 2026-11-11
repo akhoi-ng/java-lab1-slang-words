@@ -33,6 +33,10 @@ public class LoadingWindow extends JWindow {
         this("loading.message");
     }
 
+    // [THAM KHẢO] Cửa sổ chờ không viền (JWindow) có thanh tiến trình chạy liên tục (setIndeterminate), hiện trễ bằng
+    //   javax.swing.Timer, theo Oracle Java Tutorials: "How to Use Progress Bars"
+    //   https://docs.oracle.com/javase/tutorial/uiswing/components/progress.html và "How to Use Swing Timers"
+    //   https://docs.oracle.com/javase/tutorial/uiswing/misc/timer.html
     /** @param messageKey chữ dưới tiêu đề, ví dụ {@code reset.loading} khi khôi phục dữ liệu gốc */
     public LoadingWindow(String messageKey) {
         setIconImages(AppIcon.images());
@@ -75,4 +79,5 @@ public class LoadingWindow extends JWindow {
         showTimer.stop();
         dispose();
     }
+    // [HẾT THAM KHẢO]
 }

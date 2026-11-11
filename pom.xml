@@ -96,6 +96,9 @@
             </plugin>
 
             <!-- Gộp FlatLaf vào cùng 1 file jar (fat-jar) để double-click là chạy -->
+            <!-- [THAM KHẢO] Cấu hình ManifestResourceTransformer và filter loại file chữ ký theo tài liệu maven-shade-plugin:
+                 https://maven.apache.org/plugins/maven-shade-plugin/examples/executable-jar.html -->
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>

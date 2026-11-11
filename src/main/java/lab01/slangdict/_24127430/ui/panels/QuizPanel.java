@@ -423,6 +423,8 @@ public class QuizPanel extends JPanel implements FeatureScreen {
         body.repaint();
     }
 
+    // [THAM KHẢO] Gắn phím tắt bằng InputMap/ActionMap, theo Oracle Java Tutorials,
+    //   "How to Use Key Bindings" https://docs.oracle.com/javase/tutorial/uiswing/misc/keybinding.html
     /** Phím tắt dùng được khi focus nằm bất kỳ đâu trong màn hình này (không ảnh hưởng màn hình khác). */
     private void bindKey(KeyStroke key, String name, Runnable action) {
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(key, name);
@@ -433,6 +435,7 @@ public class QuizPanel extends JPanel implements FeatureScreen {
             }
         });
     }
+    // [HẾT THAM KHẢO]
 
     private static JTextArea wrappingText() {
         JTextArea area = new JTextArea();

@@ -11,6 +11,11 @@ import com.formdev.flatlaf.FlatLightLaf;
 
 import lab01.slangdict._24127430.model.Theme;
 
+// [THAM KHẢO - CẢ FILE] Cài và đổi theme FlatLaf theo tài liệu của thư viện FlatLaf (FormDev, giấy phép Apache 2.0):
+//   https://www.formdev.com/flatlaf/how-to-use/ (FlatLightLaf.setup, FlatDarkLaf.setup, FlatLaf.updateUI)
+//   https://www.formdev.com/flatlaf/customizing/ (các key Component.arc, ScrollBar.*, TitlePane.*)
+//   Tự viết: lùi về L&F hệ điều hành khi FlatLaf lỗi, color() trả màu không phải UIResource, shade().
+
 /**
  * Cài và đổi Look &amp; Feel (FlatLaf sáng/tối).
  * <p>

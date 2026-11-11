@@ -315,6 +315,8 @@ public class HistoryPanel extends JPanel implements FeatureScreen {
 
     // ===================== Model của bảng =====================
 
+    // [THAM KHẢO] Tự viết table model bằng cách kế thừa AbstractTableModel, theo Oracle Java Tutorials,
+    //   "How to Use Tables" (mục Creating a Table Model) https://docs.oracle.com/javase/tutorial/uiswing/components/table.html
     /** 4 cột Thời gian | Loại | Kiểu khớp | Từ khóa, đọc thẳng từ service. */
     private final class HistoryTableModel extends AbstractTableModel {
 
@@ -354,4 +356,5 @@ public class HistoryPanel extends JPanel implements FeatureScreen {
             };
         }
     }
+    // [HẾT THAM KHẢO]
 }

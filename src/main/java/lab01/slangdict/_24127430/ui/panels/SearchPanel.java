@@ -387,6 +387,8 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             queryField.putClientProperty("JTextField.leadingIcon", new com.formdev.flatlaf.icons.FlatSearchIcon());
         }
         queryField.addActionListener(e -> submit()); // Enter
+        // [THAM KHẢO] Nghe thay đổi của ô nhập bằng DocumentListener, theo Oracle Java Tutorials,
+        //   "How to Write a Document Listener" https://docs.oracle.com/javase/tutorial/uiswing/events/documentlistener.html
         queryField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -403,6 +405,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
                 onQueryEdited();
             }
         });
+        // [HẾT THAM KHẢO]
         bindKey(queryField, KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "focusResults", this::focusResults);
         bindKey(queryField, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "clearQuery", () -> queryField.setText(""));
 
@@ -933,6 +936,9 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         detailText.setCaretPosition(0);
 
         // Tô các từ khóa khớp trong nghĩa (chỉ khi tìm theo definition)
+        // [THAM KHẢO] Tô sáng đoạn chữ bằng Highlighter + DefaultHighlightPainter, theo Oracle Java Tutorials,
+        //   "Text Component Features" https://docs.oracle.com/javase/tutorial/uiswing/components/generaltext.html
+        //   và Javadoc javax.swing.text.DefaultHighlighter
         if (shownRequest != null && shownRequest.target() == SearchTarget.DEFINITION) {
             DefaultHighlighter.DefaultHighlightPainter painter =
                     new DefaultHighlighter.DefaultHighlightPainter(highlightColor());
@@ -944,6 +950,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
                 }
             }
         }
+        // [HẾT THAM KHẢO]
     }
 
     private static Color highlightColor() {
@@ -1152,6 +1159,8 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     // ===================== Model của bảng =====================
 
+    // [THAM KHẢO] Tự viết table model bằng cách kế thừa AbstractTableModel, theo Oracle Java Tutorials,
+    //   "How to Use Tables" (mục Creating a Table Model) https://docs.oracle.com/javase/tutorial/uiswing/components/table.html
     /** Bảng 2 cột Slang | Nghĩa, dữ liệu là danh sách kết quả đã xếp hạng. */
     private static final class ResultTableModel extends AbstractTableModel {
 
@@ -1187,6 +1196,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             return column == 0 ? entry.getSlang() : entry.getMeaningText();
         }
     }
+    // [HẾT THAM KHẢO]
 
     /** Ô bị cắt bớt ("…") thì rê chuột vào sẽ thấy đủ nội dung. */
     private static final class TooltipCellRenderer extends DefaultTableCellRenderer {

@@ -8,6 +8,11 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Optional;
 
+// [THAM KHẢO - CẢ FILE] Cách chỉ cho chạy một instance bằng khóa file của hệ điều hành:
+//   https://stackoverflow.com/questions/177189/how-to-implement-a-single-instance-java-application
+//   https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/nio/channels/FileChannel.html#tryLock()
+//   Tự viết: xử lý OverlappingFileLockException, đóng channel khi lỗi, lý do không xóa file khóa lúc thoát.
+
 /**
  * Chỉ cho một cửa sổ app dùng một thư mục data/ tại một thời điểm.
  * <p>

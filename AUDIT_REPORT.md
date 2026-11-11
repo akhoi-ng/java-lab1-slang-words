@@ -15,20 +15,27 @@ Từ mục 1 trở xuống giữ nguyên như lúc audit (commit `1b9e890`): s�
 | M1 | Đã sửa | `7135a94` | Chỉ giữ khóa lúc `snapshot()` (100k: 80–240 ms), serialize ngoài khóa. 100k khi đang ghi: tìm 0–36 ms, add 0 ms |
 | M2 | Đã sửa | `7135a94` | Chỉ thêm từ mới vào BK-tree từ vựng, build ba nhóm index song song. Reset 100k: 0,46–0,71 s (1 CPU: 0,8–1,25 s) |
 | M3 | Đã sửa | `006d7b0` | Kết quả tìm-khi-gõ được ghi khi ngừng gõ 1,5 s, khi chuyển vào bảng kết quả, hoặc khi rời màn hình Search. Gõ tiếp/xóa ô tìm/Enter thì hủy, nên không ghi chữ gõ dở và không ghi hai lần. Sửa cả dòng gợi ý và màn hình Lịch sử trống. Chạy jar thật, gõ phím tự động (KeyEvent vào hàng đợi sự kiện của app): gõ xong → vào lịch sử 1.640 ms; nhấn ↓ → 47 ms; Ctrl+3 → 153 ms; gõ chậm o-m-g chỉ ghi `omg`; `history.dat` sau Ctrl+Q đủ 5 dòng. Bản trước khi sửa: chờ 5 s vẫn không ghi |
-| L1 | Đã sửa (chưa commit) | | Thư mục cạnh jar không tạo/không ghi được (ghi thử một file tạm, không dùng `Files.isWritable`) thì dùng `<home>/.slang-dictionary`, dialog báo vị trí ở lần chạy tạo ra thư mục đó. Thư mục chỉ định bằng `-Dslangdict.data.dir` thì không tự đổi. Test bằng một file chiếm tên `data` (không tạo được thư mục); chưa chạy jar trong thư mục bị khóa quyền ghi thật |
-| L2 | Đã sửa (chưa commit) | | `InstanceLock`: `FileChannel.tryLock()` trên `data/app.lock` trước khi đọc dữ liệu; không lấy được thì dialog "đang mở ở một cửa sổ khác" rồi thoát. Test có một JVM con thật bị từ chối khi khóa đang bị giữ. Chạy jar thật hai lần cùng `data/`: lần hai chỉ hiện dialog cảnh báo, không mở cửa sổ chính |
-| L5 | Đã sửa (chưa commit) | | Nút "Hiện tất cả" cạnh dòng trạng thái khi kết quả bị cắt ở 1.000 dòng: tìm lại đúng lần tìm đó với `UNLIMITED`, giữ dòng đang chọn, không ghi lịch sử thêm; tìm lại sau thêm/sửa/xóa vẫn hiện đủ, lần tìm khác lại bắt đầu từ 1.000 |
+| L1 | Đã sửa | `093f7ef` | Thư mục cạnh jar không tạo/không ghi được (ghi thử một file tạm, không dùng `Files.isWritable`) thì dùng `<home>/.slang-dictionary`, dialog báo vị trí ở lần chạy tạo ra thư mục đó. Thư mục chỉ định bằng `-Dslangdict.data.dir` thì không tự đổi. Test bằng một file chiếm tên `data` (không tạo được thư mục); chưa chạy jar trong thư mục bị khóa quyền ghi thật |
+| L2 | Đã sửa | `093f7ef` | `InstanceLock`: `FileChannel.tryLock()` trên `data/app.lock` trước khi đọc dữ liệu; không lấy được thì dialog "đang mở ở một cửa sổ khác" rồi thoát. Test có một JVM con thật bị từ chối khi khóa đang bị giữ. Chạy jar thật hai lần cùng `data/`: lần hai chỉ hiện dialog cảnh báo, không mở cửa sổ chính |
+| L5 | Đã sửa | `093f7ef` | Nút "Hiện tất cả" cạnh dòng trạng thái khi kết quả bị cắt ở 1.000 dòng: tìm lại đúng lần tìm đó với `UNLIMITED`, giữ dòng đang chọn, không ghi lịch sử thêm; tìm lại sau thêm/sửa/xóa vẫn hiện đủ, lần tìm khác lại bắt đầu từ 1.000 |
 | L3 | Đã sửa | `e7fd3e4` | Nút mặc định của hộp xác nhận xóa là "Hủy". Chạy jar thật: Delete → Enter thì slang vẫn còn; bấm "Xóa" thì mất đúng 1 slang |
 | L4 | Đã sửa | `e7fd3e4` | F2 mặc định "Chứa chuỗi" (`laugh` ra 117 kết quả, 78 có `laughing`). Keyword không có chữ/số thì tìm nguyên chuỗi trong nghĩa ở mọi mode (`&`: 14 kết quả, có tô sáng; 100k: 12–27 ms) |
+
+Yêu cầu nộp bài (mục 3), làm ở bước 13 của PLAN:
+
+| ID | Trạng thái | Ghi chú |
+|---|---|---|
+| IV.6 | Đã làm | Đánh dấu `[THAM KHẢO - CẢ FILE]` / `[THAM KHẢO]`…`[HẾT THAM KHẢO]` trong code, bảng nguồn và cách tính trong `README.md` mục 6: đếm được 928/7.101 dòng code ≈ 13%, khai 15% |
+| IV.8 | Đã làm phần trong repo | Có `README.md`, `24127430_TuChamDiem.txt` (còn điền họ tên, link video), jar build lại sau mọi sửa đổi và đã chạy thử ở thư mục khác (lần đầu build từ text, lần sau đọc `.dat`). Hình commit, video, file zip làm ngoài repo |
 
 Mục 6 (tài liệu nói khác code):
 
 | Dòng trong mục 6 | Trạng thái |
 |---|---|
-| `PLAN.md:13` bước 12 chưa commit | Đã sửa (chưa commit): ghi đã commit bước 1–12 và đã sửa các lỗi audit |
-| `PLAN.md:15` số commit | Đã sửa (chưa commit): 26 commit tính tới commit sửa L1/L2/L5, kèm số commit từng ngày và lệnh đếm lại |
-| `ARCHITECTURE.md:120` nhắc tới README | Đã sửa (chưa commit): bỏ "và README", ghi FlatLaf khai báo trong `pom.xml`, được shade vào jar, ghi giấy phép ở Giới thiệu. `README.md` vẫn là việc của bước 13 |
-| `ARCHITECTURE.md:299` id không dùng lại | Đã sửa code cho khớp tài liệu (chưa commit): Reset gọi `reserveIdsBelow(nextId cũ)` nên id của slang đã thêm không được cấp lại, kể cả sau khi mở lại app |
+| `PLAN.md:13` bước 12 chưa commit | Đã sửa (`093f7ef`): ghi đã commit bước 1–12 và đã sửa các lỗi audit |
+| `PLAN.md:15` số commit | Đã sửa (`093f7ef`): 26 commit tính tới commit sửa L1/L2/L5, kèm số commit từng ngày và lệnh đếm lại |
+| `ARCHITECTURE.md:120` nhắc tới README | Đã sửa (`093f7ef`): bỏ "và README", ghi FlatLaf khai báo trong `pom.xml`, được shade vào jar, ghi giấy phép ở Giới thiệu. `README.md` đã có ở bước 13 |
+| `ARCHITECTURE.md:299` id không dùng lại | Đã sửa code cho khớp tài liệu (`093f7ef`): Reset gọi `reserveIdsBelow(nextId cũ)` nên id của slang đã thêm không được cấp lại, kể cả sau khi mở lại app |
 | `ARCHITECTURE.md:336` `loadOrBuild` bắt mọi `IOException` | Đã sửa cùng C2 (`551d64b`) |
 | `ARCHITECTURE.md:344` `Error` không được báo | Đã sửa cùng C1 (`5d5804d`) |
 | `ARCHITECTURE.md:354`, `PLAN.md:131` số đo `.dat` | Đã đo lại sau C1 (`5d5804d`) và M1/M2 (`7135a94`) |

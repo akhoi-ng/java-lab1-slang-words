@@ -66,8 +66,11 @@ public class MainFrame extends JFrame {
     private final Path dataDir;
     private final String version;
 
+    // [THAM KHẢO] Đổi màn hình bằng CardLayout (mỗi màn hình một card, show theo tên), theo Oracle Java Tutorials,
+    //   "How to Use CardLayout" https://docs.oracle.com/javase/tutorial/uiswing/layout/card.html
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel cardPanel = new JPanel(cardLayout);
+    // [HẾT THAM KHẢO]
     private final Map<Feature.Card, JComponent> screens = new EnumMap<>(Feature.Card.class);
     private final Map<Feature, Runnable> actions = new EnumMap<>(Feature.class);
     private final Sidebar sidebar;
@@ -224,6 +227,9 @@ public class MainFrame extends JFrame {
 
     // ===================== Dựng giao diện =====================
 
+    // [THAM KHẢO] Dựng thanh menu (JMenuBar, JMenu, JMenuItem, setAccelerator, JRadioButtonMenuItem + ButtonGroup)
+    //   theo Oracle Java Tutorials, "How to Use Menus" https://docs.oracle.com/javase/tutorial/uiswing/components/menu.html
+    //   Tự viết: menu Chức năng sinh từ enum Feature, nút đổi theme đặt sát mép phải bằng glue.
     private JMenuBar buildMenuBar() {
         JMenuBar bar = new JMenuBar();
 
@@ -295,6 +301,7 @@ public class MainFrame extends JFrame {
         }
         return bar;
     }
+    // [HẾT THAM KHẢO]
 
     private void buildPlaceholderScreens() {
         for (Feature.Card card : Feature.Card.values()) {

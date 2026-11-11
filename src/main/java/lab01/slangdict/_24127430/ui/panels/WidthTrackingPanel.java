@@ -7,6 +7,10 @@ import java.awt.Rectangle;
 import javax.swing.JPanel;
 import javax.swing.Scrollable;
 
+// [THAM KHẢO - CẢ FILE] Cài interface Scrollable để nội dung luôn rộng bằng khung cuộn, theo Oracle Java Tutorials,
+//   "How to Use Scroll Panes" (mục Implementing a Scrolling-Savvy Client)
+//   https://docs.oracle.com/javase/tutorial/uiswing/components/scrollpane.html
+
 /**
  * Nội dung bên trong JScrollPane: luôn rộng đúng bằng khung nhìn (để chữ dài tự xuống dòng thay vì sinh thanh cuộn
  * ngang), cao theo nội dung (dài quá thì cuộn dọc). Dùng ở F8 (slang nhiều nghĩa) và F9/F10 (đáp án dài).

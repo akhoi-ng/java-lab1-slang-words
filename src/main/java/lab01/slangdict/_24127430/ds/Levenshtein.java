@@ -1,5 +1,10 @@
 package lab01.slangdict._24127430.ds;
 
+// [THAM KHẢO - CẢ FILE] Thuật toán quy hoạch động "Iterative with two matrix rows" trong bài
+//   https://en.wikipedia.org/wiki/Levenshtein_distance
+//   Phần lấy từ nguồn: công thức truy hồi và kỹ thuật chỉ giữ 2 hàng. Tự viết: các nhánh thoát sớm,
+//   interface DistanceMetric để dùng chung với BKTree, readResolve giữ singleton khi đọc .dat.
+
 /**
  * Khoảng cách chỉnh sửa Levenshtein: số phép chèn / xoá / thay 1 ký tự ít nhất để biến a thành b.
  * Ví dụ: d("lol", "lool") = 1, d("love", "lvoe") = 2.

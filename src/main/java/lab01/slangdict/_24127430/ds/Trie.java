@@ -14,6 +14,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+// [THAM KHẢO - CẢ FILE] Trie theo R. Sedgewick, K. Wayne, "Algorithms" 4th ed., mục 5.2 Tries (lớp TrieST)
+//   https://algs4.cs.princeton.edu/52trie/TrieST.java.html
+//   Phần lấy từ nguồn: put/get đi theo từng ký tự, gom mọi key dưới nút của tiền tố (collect).
+//   Tự viết: con lưu bằng TreeMap thay cho mảng R phần tử, mỗi nút giữ tập value (slang trùng tên), remove có
+//   cắt nhánh rỗng, giới hạn số kết quả, copy(), ghi .dat dạng phẳng (writeReplace/readResolve) để tránh tràn stack.
+
 /**
  * Trie (cây tiền tố) generic: mỗi cạnh là một ký tự, mỗi nút có thể giữ nhiều value
  * (vì nhiều entry có thể trùng tên slang).

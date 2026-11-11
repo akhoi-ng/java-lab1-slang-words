@@ -12,6 +12,10 @@ import javax.swing.JPanel;
 
 import lab01.slangdict._24127430.ui.ThemeManager;
 
+// [THAM KHẢO - CẢ FILE] Vẽ panel bo góc bằng Graphics2D (khử răng cưa, RoundRectangle2D, clip) theo Oracle Java Tutorials,
+//   "2D Graphics" https://docs.oracle.com/javase/tutorial/2d/
+//   Tự viết: màu lấy theo theme lúc vẽ, vạch màu nhấn bên trái.
+
 /**
  * Panel nền hơi khác màu nền màn hình, bo góc, viền mảnh, vạch màu nhấn bên trái: làm nổi nội dung chính của màn hình
  * (slang hôm nay ở F8, đề bài ở F9/F10). Màu lấy từ theme lúc vẽ, nên đổi sáng/tối vẫn đúng màu.

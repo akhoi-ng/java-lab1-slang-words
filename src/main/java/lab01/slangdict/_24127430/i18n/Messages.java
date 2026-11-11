@@ -98,6 +98,9 @@ public final class Messages {
         }
     }
 
+    // [THAM KHẢO] Đa ngôn ngữ bằng ResourceBundle (.properties) và MessageFormat, theo Oracle Java Tutorials,
+    //   "Isolating Locale-Specific Data" https://docs.oracle.com/javase/tutorial/i18n/resbundle/index.html
+    //   và "Dealing with Compound Messages" https://docs.oracle.com/javase/tutorial/i18n/format/messageFormat.html
     /**
      * Chuỗi có tham số kiểu {@code {0}}, {@code {1,number,integer}} (định dạng số theo ngôn ngữ:
      * 7.638 trong tiếng Việt, 7,638 trong tiếng Anh). Lưu ý: trong các chuỗi này dấu {@code '}
@@ -121,4 +124,5 @@ public final class Messages {
         // Java 9+ đọc file .properties của ResourceBundle bằng UTF-8, nên viết thẳng tiếng Việt được
         return ResourceBundle.getBundle(BUNDLE, target, CONTROL);
     }
+    // [HẾT THAM KHẢO]
 }

@@ -155,6 +155,8 @@ public final class AppPaths {
         }
     }
 
+    // [THAM KHẢO] Lấy thư mục chứa file jar đang chạy qua ProtectionDomain/CodeSource:
+    //   https://stackoverflow.com/questions/320542/how-to-get-the-path-of-a-running-jar-file
     /** Vị trí nạp class App: file .jar hoặc thư mục target/classes; null nếu không xác định được. */
     private static Path codeLocation() {
         try {
@@ -165,4 +167,5 @@ public final class AppPaths {
             return null;
         }
     }
+    // [HẾT THAM KHẢO]
 }

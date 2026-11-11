@@ -7,6 +7,11 @@ import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TreeMap;
 
+// [THAM KHẢO - CẢ FILE] Khái niệm inverted index (từ → danh sách tài liệu chứa từ đó) theo
+//   C. D. Manning, P. Raghavan, H. Schütze, "Introduction to Information Retrieval", chương 1
+//   https://nlp.stanford.edu/IR-book/
+//   Tự viết: cài đặt bằng TreeMap<K, Set<V>> và lấy khoảng key theo tiền tố bằng subMap.
+
 /**
  * Inverted index generic: mỗi key (ví dụ một từ trong definition) trỏ tới tập value
  * (ví dụ id các entry có chứa từ đó).

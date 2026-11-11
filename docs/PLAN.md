@@ -10,7 +10,7 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong và đã commit bước 1–12**; đã sửa mọi lỗi trong `AUDIT_REPORT.md` (C1, C2, H1, M1–M3, L1–L5) → làm bước 13 |
+| Bước đang ở | **Xong bước 1–13** (bước 13 🟡 chờ commit); đã sửa mọi lỗi trong `AUDIT_REPORT.md`. Còn các việc ngoài repo ở checklist mục 6 (video, hình commit, zip) |
 | Test | 262/262 pass (`.\mvnw.cmd test`) |
 | Commit đã có | 26 commit trên 6 ngày (tính tới commit sửa L1, L2, L5): 04/11 (1), 05/11 (1), 08/11 (1), 09/11 (3), 10/11 (6), 11/11 (14) → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày). Đếm lại bằng `git rev-list --count HEAD` |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
@@ -60,7 +60,7 @@
 | 10 | Add / Edit / Delete (service + dialog) | **F4, F5, F6** | ✅ 11/11 |
 | 11 | Reset + Random | **F7, F8** | ✅ 11/11 |
 | 12 | Quiz (2 loại) | **F9, F10** | ✅ 11/11 |
-| 13 | README, file tự chấm điểm, rà lại, jar cuối | nộp bài | ⬜ |
+| 13 | README, file tự chấm điểm, đánh dấu tham khảo, jar cuối | nộp bài | 🟡 11/11 |
 
 ### Lịch commit đề xuất
 
@@ -352,6 +352,7 @@ Các method:
 - Rà lại toàn bộ UI ở cả hai ngôn ngữ và hai theme; `.\mvnw.cmd package`; chạy thử jar ở một thư mục khác
 - Chụp hình lịch sử commit (`git log` hoặc trang commits trên GitHub)
 - Đóng gói `24127430_<điểm>.zip` theo mục IV.8 (checklist ở mục 6)
+- **Đã làm (11/11):** `README.md`; `24127430_TuChamDiem.txt` (tự chấm 100/100, còn trống họ tên và link video); đánh dấu tham khảo trong code bằng `[THAM KHẢO - CẢ FILE]` (đầu file) và `[THAM KHẢO]`…`[HẾT THAM KHẢO]` (đoạn), nguồn liệt kê ở README mục 6. Đếm dòng code (không tính dòng trống, chú thích) trong phần đánh dấu: 928 / 7.101 ≈ 13%, khai **15%** (làm tròn lên cho `pom.xml` và các chỗ dùng API theo Javadoc). Theo lời thầy, code do AI viết được phép và không tính vào %, chỉ tính code của người khác/nguồn khác. `.\mvnw.cmd package`: 262/262 test pass; chạy jar ở thư mục khác có dấu cách: lần đầu build từ text 85 ms, lần sau đọc `.dat` 202 ms.
 
 ---
 
@@ -400,12 +401,12 @@ và docs/ARCHITECTURE.md trước khi code.
 
 ## 6. Checklist nộp bài (mục IV của đề)
 
-- [ ] ≥ 10 commit trải trên ≥ 5 ngày
-- [ ] 10 chức năng chạy đúng, mỗi chức năng < 1s với 100k slang
-- [ ] `target/slang-dictionary.jar` chạy được bằng double-click / `java -jar`
-- [ ] File data (`slang.txt`)
+- [x] ≥ 10 commit trải trên ≥ 5 ngày (26 commit / 6 ngày)
+- [x] 10 chức năng chạy đúng, mỗi chức năng < 1s với 100k slang
+- [x] `target/slang-dictionary.jar` chạy được bằng double-click / `java -jar` (build lại 11/11 sau bước 13)
+- [x] File data (`slang.txt`)
 - [ ] Hình chụp lịch sử commit
-- [ ] File `.txt` tự chấm điểm từng chức năng + link video YouTube
+- [ ] File `.txt` tự chấm điểm từng chức năng + link video YouTube (`24127430_TuChamDiem.txt` đã có, **còn điền họ tên + link video**)
 - [ ] Video YouTube: cấu trúc dữ liệu, % tham khảo, demo trọn một chức năng
-- [ ] Đánh dấu phần tham khảo trong code + khai tổng % tham khảo (code do AI viết cũng cần khai trung thực)
+- [x] Đánh dấu phần tham khảo trong code + khai tổng % tham khảo (15%, README mục 6)
 - [ ] Đặt tên file nộp `24127430_<điểm>.zip`, gồm source code, jar, data, hình commit, file txt

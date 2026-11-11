@@ -46,6 +46,8 @@ Những lần chạy sau chỉ việc nạp lên là dùng được ngay. Đề 
 | `.gitattributes` | Giữ đúng kiểu xuống dòng cho mvnw (LF) và mvnw.cmd (CRLF). Sai kiểu xuống dòng thì script sẽ không chạy. |
 | `slang.txt` | Dữ liệu gốc của thầy, đã sửa lỗi. Đây là **nguồn sự thật duy nhất**: không copy tay đi chỗ khác, để Maven copy khi build. |
 | `tools/*.py` | Hai script Python đã dùng để sửa và kiểm tra `slang.txt`. Không thuộc app Java. |
+| `README.md` | Cách chạy/build, danh sách chức năng, cấu trúc dữ liệu, thư viện và **phần tham khảo** (bảng nguồn + cách tính 15%). Chỗ tham khảo trong code được đánh dấu `[THAM KHẢO - CẢ FILE]` ở đầu file hoặc `[THAM KHẢO]`…`[HẾT THAM KHẢO]` quanh một đoạn. |
+| `24127430_TuChamDiem.txt` | File tự chấm điểm nộp kèm bài (mục IV.2, IV.8 của đề): điểm từng chức năng, % tham khảo, link video. |
 | `docs/` | Tài liệu: file này và PLAN.md, cả hai đều được commit. `docs/` nằm trong `.git/info/exclude` nên mỗi file phải `git add -f` lần đầu; sau đó git theo dõi thay đổi bình thường. |
 | `target/` | Maven sinh ra khi build: các file `.class`, báo cáo test, `slang-dictionary.jar`. Xóa đi lúc nào cũng được. |
 

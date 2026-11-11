@@ -10,6 +10,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+// [THAM KHẢO - CẢ FILE] Cấu trúc BK-tree theo:
+//   - W. A. Burkhard, R. M. Keller (1973), "Some approaches to best-match file searching", Communications of the ACM 16(4)
+//   - https://en.wikipedia.org/wiki/BK-tree
+//   - Nick Johnson, "Damn Cool Algorithms, Part 1: BK-Trees", http://blog.notdot.net/2007/4/Damn-Cool-Algorithms-Part-1-BK-Trees
+//   Phần lấy từ nguồn: cách chèn (nhãn cạnh = khoảng cách tới nút cha) và cách tìm chỉ xuống các cạnh có nhãn
+//   trong [d-k, d+k]. Tự viết: generic hóa, xóa mềm (deleted), duyệt bằng ngăn xếp thay cho đệ quy, copy().
+
 /**
  * BK-tree (Burkhard–Keller) generic: tìm mọi phần tử có khoảng cách ≤ k tới truy vấn (fuzzy search).
  * <p>

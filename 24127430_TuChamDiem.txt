@@ -1,0 +1,55 @@
+CSC13002 - LẬP TRÌNH ỨNG DỤNG JAVA
+ĐỒ ÁN #1 - SLANG WORD
+
+MSSV      : 24127430
+Họ tên    : <ĐIỀN HỌ TÊN>
+Video demo: <DÁN LINK YOUTUBE>
+Source    : https://github.com/akhoi-ng/java-lab1-slang-words
+
+=====================================================================
+TỰ CHẤM ĐIỂM (thang 100, mỗi chức năng 10 điểm)
+Quy tắc: chấm trên 100.000 slang word; chức năng chậm hơn 1 s trừ 50%,
+giao diện không tiện dụng trừ 30%, chạy sai 0 điểm.
+=====================================================================
+
+STT | Chức năng                                    | Điểm  | Ghi chú
+----+----------------------------------------------+-------+--------------------------------------------------
+ 1  | Tìm kiếm theo slang word                     | 10/10 | 4 kiểu khớp (chính xác, tiền tố, chuỗi con, gần đúng); 100k: 1-70 ms
+ 2  | Tìm kiếm theo definition                     | 10/10 | Hiện mọi slang có definition chứa từ khóa, tô sáng từ khóa; 100k: 1-220 ms
+ 3  | Hiển thị history                             | 10/10 | Lưu qua các lần chạy, bấm đúp để tìm lại, xóa từng dòng / xóa hết
+ 4  | Add slang word (trùng thì hỏi overwrite /    | 10/10 | Trùng tên: chọn ghi đè, thêm nghĩa, hoặc tạo bản mới (duplicate)
+    | duplicate)                                   |       |
+ 5  | Edit slang word                              | 10/10 | Sửa tên và từng nghĩa; đổi sang tên đã có thì hỏi lại như khi add
+ 6  | Delete slang word (confirm trước khi xóa)    | 10/10 | Hộp xác nhận, nút mặc định là Hủy
+ 7  | Reset danh sách slang gốc                    | 10/10 | Có xác nhận, tùy chọn xóa cả history; 100k: 0,45-0,71 s
+ 8  | Random 1 slang word (On this day)            | 10/10 | Cả ngày cùng một slang + nút random slang khác
+ 9  | Đố vui: 1 slang, 4 đáp án definition         | 10/10 | Phím 1-4, điểm, chuỗi đúng, lượt 10/20 câu có bảng tổng kết; < 1 ms/câu
+10  | Đố vui: 1 definition, 4 đáp án slang         | 10/10 | Đáp án nhiễu không bao giờ cũng đúng; < 1 ms/câu
+----+----------------------------------------------+-------+--------------------------------------------------
+    | TỔNG                                         | 100   |
+
+=====================================================================
+YÊU CẦU CHUNG
+=====================================================================
+- Java IO, OOP, Collections, Generic: có (Swing + FlatLaf, Java 17).
+- Menu chọn chức năng: menu "Chức năng" + thanh bên trái + phím tắt Ctrl+1..Ctrl+0.
+- Cấu trúc dữ liệu ngoài List: HashMap, Trie, InvertedIndex (TreeMap), BK-tree + Levenshtein.
+  Tìm kiếm dưới 1 s với 100.000 slang word (đo bằng SearchBenchmarkTest, xem README.md).
+- Lưu cấu trúc dữ liệu: data/dictionary.dat, lần chạy sau không index lại.
+- Lưu danh sách sau add/edit/delete: có (ghi nền vào data/dictionary.dat).
+- Git: 10+ commit trải trên 5+ ngày (hình chụp kèm trong bài nộp).
+
+=====================================================================
+PHẦN TRĂM THAM KHẢO: 15%
+=====================================================================
+Các phần tham khảo được đánh dấu trong code bằng từ khóa "THAM KHẢO"
+(file/đoạn và nguồn cụ thể: README.md, mục 6).
+
+=====================================================================
+NỘI DUNG BÀI NỘP
+=====================================================================
+- source/                 : mã nguồn (Maven project)
+- slang-dictionary.jar    : chương trình (java -jar slang-dictionary.jar, cần Java 17+)
+- slang.txt               : file dữ liệu
+- commits.png             : hình chụp lịch sử commit
+- 24127430_TuChamDiem.txt : file này

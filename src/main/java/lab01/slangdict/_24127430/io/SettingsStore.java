@@ -76,6 +76,8 @@ public class SettingsStore {
         properties.setProperty(KEY_THEME, theme.name());
     }
 
+    // [THAM KHẢO] Lưu/đọc cấu hình bằng java.util.Properties (store/load), theo Oracle Java Tutorials, "Properties"
+    //   https://docs.oracle.com/javase/tutorial/essential/environment/properties.html
     /** Ghi xuống đĩa (file nhỏ, vài ms, gọi trên EDT được). */
     public void save() throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -97,4 +99,5 @@ public class SettingsStore {
             properties.clear();
         }
     }
+    // [HẾT THAM KHẢO]
 }
