@@ -421,7 +421,7 @@ class DictionaryServiceTest {
 
     @Test
     void brokenOriginalFileLeavesTheDictionaryAsItWas() throws Exception {
-        java.nio.file.Files.writeString(dir.resolve("slang.txt"), "abc`First\nno separator here\n");
+        java.nio.file.Files.writeString(dir.resolve("slang.txt"), "abc`First\n`no slang here\n");
         SlangDictionary before = service.current();
 
         assertThrows(lab01.slangdict._24127430.io.SlangFormatException.class, service::reset);

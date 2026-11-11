@@ -150,7 +150,8 @@ Thuật toán xử lý mỗi dòng:
 Những điểm khác:
 - Đọc file bằng **UTF-8**, vì có các slang như `` ELNS`Eller noe sånt `` và `®`.
 - Bỏ qua dòng header `` Slag`Meaning ``, dòng trống và ký tự BOM (một ký tự ẩn mà Notepad hay thêm vào đầu file).
-- Dòng sai định dạng ném **`SlangFormatException`** kèm số dòng, ví dụ *"Line 3: missing '`' separator"*. Đây là **checked exception** (kế thừa `Exception`), nên người gọi bắt buộc phải xử lý. Phần này đáp ứng chuẩn đầu ra G5.8 về quản lý ngoại lệ.
+- Dòng không có dấu `` ` `` là **nghĩa bổ sung của slang ở dòng trước** (cắt theo `|`, bỏ nghĩa đã có). File gốc của đề có 5 dòng như vậy (`AMA`, `BOMB`, `C4C`, `ER`, `HOODIE`), ví dụ dòng `Against Medical Advice` ngay sau `` AMA`Ask Me Anything ``. Nhờ đó app đọc được cả file chưa sửa của đề (7.656 entry, 8.959 cặp) khi người chấm đặt nó vào `data/slang.txt`. Cách hiểu này giống `tools/fix_slang.py`.
+- Dòng sai định dạng ném **`SlangFormatException`** kèm số dòng, ví dụ *"Line 3: empty slang word"* hoặc *"Line 1: missing '`' separator"* (dòng không có `` ` `` mà chưa có slang nào trước nó). Đây là **checked exception** (kế thừa `Exception`), nên người gọi bắt buộc phải xử lý. Phần này đáp ứng chuẩn đầu ra G5.8 về quản lý ngoại lệ.
 - `try-with-resources` (`try (BufferedReader r = ...)`) tự đóng file kể cả khi có lỗi xảy ra.
 - `formatLine` / `write` làm chiều ngược lại: biến entry thành dòng text. Dùng để sinh file 100k slang.
 - id được đánh theo thứ tự dòng, bắt đầu từ 0.
@@ -796,7 +797,7 @@ vẫn chưa đủ?        thử entry khác làm đề (tối đa 20; từ đi�
 | File test | Kiểm tra gì |
 |---|---|
 | `io/OriginalDataResourceTest` | `slang.txt` có trong jar và đủ 7.638 entry |
-| `io/SlangFileParserTest` | Đọc đủ **7.638 entry và 8.941 cặp slang–nghĩa**, đối chiếu với cách tính độc lập. Slang chứa `\|`, UTF-8, BOM, dòng lỗi báo đúng số dòng, ghi ra rồi đọc lại phải giống hệt |
+| `io/SlangFileParserTest` | Đọc đủ **7.638 entry và 8.941 cặp slang–nghĩa**, đối chiếu với cách tính độc lập. Slang chứa `\|`, UTF-8, BOM, dòng không có `` ` `` thành nghĩa mới của slang trước (như 5 dòng vỡ của file gốc), dòng lỗi báo đúng số dòng, ghi ra rồi đọc lại phải giống hệt |
 | `model/ModelTest` | Kiểm tra dữ liệu đầu vào, so sánh bằng nhau theo id, thứ tự sắp xếp kết quả, quiz bắt buộc có 4 đáp án |
 | `ds/DataStructuresTest` | Levenshtein ra đúng giá trị đã biết. Trie và BK-tree được **so với cách duyệt tuần tự** trên 2.000–3.000 từ ngẫu nhiên và phải ra kết quả giống hệt. Lưu xuống `.dat` rồi đọc lại vẫn đúng |
 | `core/TokenizerTest` | Tách từ đúng và giữ thứ tự, giữ chữ Unicode, không phụ thuộc locale của máy (thử với locale Thổ Nhĩ Kỳ), chuẩn hóa tên giữ nguyên ký hiệu |

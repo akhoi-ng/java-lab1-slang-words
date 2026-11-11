@@ -11,7 +11,7 @@ Từ mục 1 trở xuống giữ nguyên như lúc audit (commit `1b9e890`): s�
 |---|---|---|---|
 | C1 | Đã sửa | `5d5804d` | Trie ghi phẳng, đọc `.dat` trên luồng stack 16 MB, tên tối đa 100 ký tự, luồng ghi báo cả `Error` |
 | C2 | Đã sửa | `551d64b` | Chỉ build lại khi gặp `DictionaryFormatException`; file hỏng giữ lại thành `dictionary.dat.bad` và có dialog cảnh báo; lỗi I/O khác thì không ghi đè |
-| H1 | Chưa sửa | | |
+| H1 | Đã sửa (chưa commit) | | Dòng không có `` ` `` thành nghĩa mới của entry trước (không nối vào nghĩa cuối như diff đề xuất: 5 dòng vỡ đều là nghĩa riêng, vd. `AMA` → "Against Medical Advice"). File gốc `c863d3f`: 7.656 entry, 8.959 cặp, khớp `fix_slang.py` |
 | M1 | Đã sửa | `7135a94` | Chỉ giữ khóa lúc `snapshot()` (100k: 80–240 ms), serialize ngoài khóa. 100k khi đang ghi: tìm 0–36 ms, add 0 ms |
 | M2 | Đã sửa | `7135a94` | Chỉ thêm từ mới vào BK-tree từ vựng, build ba nhóm index song song. Reset 100k: 0,46–0,71 s (1 CPU: 0,8–1,25 s) |
 | M3 | Chưa sửa | | |

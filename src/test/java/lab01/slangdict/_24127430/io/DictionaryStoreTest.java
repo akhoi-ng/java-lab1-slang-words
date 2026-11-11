@@ -311,7 +311,7 @@ class DictionaryStoreTest {
 
     @Test
     void badOriginalTextReportsLineNumber() throws Exception {
-        Files.writeString(dir.resolve("slang.txt"), "Slag`Meaning\nLOL`Laughing\nbroken line\n",
+        Files.writeString(dir.resolve("slang.txt"), "Slag`Meaning\nLOL`Laughing\n`broken line\n",
                 StandardCharsets.UTF_8);
         try (DictionaryStore store = store(dir)) {
             SlangFormatException e = assertThrows(SlangFormatException.class, store::loadOrBuild);

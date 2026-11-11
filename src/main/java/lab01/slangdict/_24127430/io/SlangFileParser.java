@@ -22,6 +22,13 @@ import lab01.slangdict._24127430.model.SlangEntry;
  * </pre>
  * Lưu ý: tên slang có thể chứa '|' (":|", "8-|") nên chỉ tách tên ở dấu '`' ĐẦU TIÊN,
  * còn '|' chỉ dùng để tách các nghĩa ở phần sau.
+ * <p>
+ * Dòng không có dấu '`' là nghĩa bổ sung của slang ở dòng trước. File gốc của đề có 5 dòng
+ * như vậy, ví dụ:
+ * <pre>
+ * AMA`Ask Me Anything
+ * Against Medical Advice            &lt;- thành nghĩa thứ hai của AMA
+ * </pre>
  */
 public final class SlangFileParser {
 
@@ -49,7 +56,8 @@ public final class SlangFileParser {
 
     /**
      * Đọc toàn bộ entry; id được đánh theo thứ tự xuất hiện, bắt đầu từ 0.
-     * Bỏ qua dòng trống và dòng header.
+     * Bỏ qua dòng trống và dòng header. Dòng không có '`' được thêm vào nghĩa của entry trước
+     * (bỏ nghĩa đã có); nếu chưa có entry nào thì ném {@link SlangFormatException}.
      */
     public static List<SlangEntry> parse(BufferedReader reader) throws IOException, SlangFormatException {
         List<SlangEntry> entries = new ArrayList<>();
@@ -63,9 +71,25 @@ public final class SlangFileParser {
             if (line.isBlank() || (lineNumber == 1 && line.strip().equalsIgnoreCase(HEADER))) {
                 continue;
             }
+            if (line.indexOf(SLANG_SEPARATOR) < 0 && !entries.isEmpty()) {
+                int last = entries.size() - 1;
+                entries.set(last, withExtraMeanings(entries.get(last), line));
+                continue;
+            }
             entries.add(parseLine(line, entries.size(), lineNumber));
         }
         return entries;
+    }
+
+    /** Dòng nối tiếp: thêm các nghĩa của dòng vào cuối entry, bỏ nghĩa đã có. */
+    private static SlangEntry withExtraMeanings(SlangEntry entry, String line) {
+        List<String> meanings = new ArrayList<>(entry.getMeanings());
+        for (String meaning : splitMeanings(line)) {
+            if (!meanings.contains(meaning)) {
+                meanings.add(meaning);
+            }
+        }
+        return meanings.size() == entry.getMeanings().size() ? entry : entry.withMeanings(meanings);
     }
 
     /** Tách một dòng "slang`nghĩa1| nghĩa2" thành SlangEntry. */
@@ -79,17 +103,23 @@ public final class SlangFileParser {
             throw new SlangFormatException(lineNumber, "empty slang word");
         }
 
+        List<String> meanings = splitMeanings(line.substring(separator + 1));
+        if (meanings.isEmpty()) {
+            throw new SlangFormatException(lineNumber, "slang '" + slang + "' has no meaning");
+        }
+        return new SlangEntry(id, slang, meanings);
+    }
+
+    /** "nghĩa1| nghĩa2" -> [nghĩa1, nghĩa2], cắt khoảng trắng, bỏ phần rỗng. */
+    private static List<String> splitMeanings(String text) {
         List<String> meanings = new ArrayList<>();
-        for (String part : line.substring(separator + 1).split(MEANING_SPLIT_REGEX)) {
+        for (String part : text.split(MEANING_SPLIT_REGEX)) {
             String meaning = part.strip();
             if (!meaning.isEmpty()) {
                 meanings.add(meaning);
             }
         }
-        if (meanings.isEmpty()) {
-            throw new SlangFormatException(lineNumber, "slang '" + slang + "' has no meaning");
-        }
-        return new SlangEntry(id, slang, meanings);
+        return meanings;
     }
 
     /** Ngược lại với parseLine: SlangEntry -> "slang`nghĩa1| nghĩa2". */

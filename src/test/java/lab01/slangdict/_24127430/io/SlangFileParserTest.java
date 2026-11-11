@@ -96,10 +96,32 @@ class SlangFileParserTest {
     }
 
     @Test
+    void lineWithoutSeparatorIsAnExtraMeaningOfThePreviousEntry() throws Exception {
+        // Giống 2 trong 5 chỗ vỡ của file gốc (dòng 412-413 và 907-908)
+        List<SlangEntry> entries = parse("Slag`Meaning\r\nAMA`Ask Me Anything\r\nAgainst Medical Advice\r\n"
+                + "BOMB`Something really bad\r\nSomething really good\r\n#1`Number one\r\n");
+        assertEquals(3, entries.size());
+        assertEquals(List.of("Ask Me Anything", "Against Medical Advice"), entries.get(0).getMeanings());
+        assertEquals(List.of("Something really bad", "Something really good"), entries.get(1).getMeanings());
+        assertEquals(List.of(0, 1, 2), entries.stream().map(SlangEntry::getId).toList());
+    }
+
+    @Test
+    void continuationLineIsSplitOnPipeAndSkipsKnownMeanings() throws Exception {
+        List<SlangEntry> entries = parse("LOL`Laugh\n\n  Laugh out loud| Laugh |  \n|\n");
+        assertEquals(1, entries.size());
+        assertEquals(List.of("Laugh", "Laugh out loud"), entries.get(0).getMeanings());
+    }
+
+    @Test
     void malformedLinesReportLineNumber() {
-        SlangFormatException noSeparator =
-                assertThrows(SlangFormatException.class, () -> parse("Slag`Meaning\nLOL`Laugh\nbroken line"));
-        assertEquals(3, noSeparator.getLineNumber());
+        SlangFormatException orphan =
+                assertThrows(SlangFormatException.class, () -> parse("Slag`Meaning\nbroken line\nLOL`Laugh"));
+        assertEquals(2, orphan.getLineNumber(), "dòng không có '`' mà chưa có entry nào trước nó");
+
+        SlangFormatException emptySlang =
+                assertThrows(SlangFormatException.class, () -> parse("Slag`Meaning\nLOL`Laugh\n`no slang"));
+        assertEquals(3, emptySlang.getLineNumber());
 
         assertThrows(SlangFormatException.class, () -> parse("`no slang"));
         assertThrows(SlangFormatException.class, () -> parse("LOL`  |  "));
