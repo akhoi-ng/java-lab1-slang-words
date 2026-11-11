@@ -2,7 +2,7 @@ CSC13002 - LẬP TRÌNH ỨNG DỤNG JAVA
 ĐỒ ÁN #1 - SLANG WORD
 
 MSSV      : 24127430
-Họ tên    : <ĐIỀN HỌ TÊN>
+Họ tên    : Nguyễn Anh Khôi
 Video demo: <DÁN LINK YOUTUBE>
 Source    : https://github.com/akhoi-ng/java-lab1-slang-words
 

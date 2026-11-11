@@ -10,7 +10,7 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong và đã commit bước 0–13** (bước 13: `f9373d0`); đã sửa mọi lỗi C/H/M/L trong `AUDIT_REPORT.md` và 2 lỗi tìm ra khi kiểm chứng mục 7 của audit (🟡 chờ commit). Jar build lại lúc 14:24 ngày 11/11. Còn các việc ngoài repo ở checklist mục 6 (video, điền file tự chấm, hình commit, zip) |
+| Bước đang ở | **Xong và đã commit bước 0–13** (bước 13: `f9373d0`); đã sửa mọi lỗi C/H/M/L trong `AUDIT_REPORT.md` và 2 lỗi tìm ra khi kiểm chứng mục 7 của audit. Jar build lại lúc 14:24 ngày 11/11. Còn các việc ngoài repo ở checklist mục 6 (video, điền file tự chấm, hình commit, zip) |
 | Test | 272/272 pass (`.\mvnw.cmd package`, 11/11 14:24) |
 | Commit đã có | 27 commit trên 6 ngày (tính tới `f9373d0`): 04/11 (1), 05/11 (1), 08/11 (1), 09/11 (3), 10/11 (6), 11/11 (15) → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày). Đếm lại bằng `git rev-list --count HEAD` |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
