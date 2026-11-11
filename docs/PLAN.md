@@ -226,7 +226,7 @@ Các method:
   - Vì tìm chạy trên luồng khác EDT, `SearchService` đọc index trong `synchronized (dictionary)`, cùng khóa với add/replace/remove. **Bước 10 không cần làm gì thêm**: cứ sửa từ điển trên EDT như bình thường.
   - Bảng hiện tối đa **1.000 dòng**; dòng trạng thái vẫn ghi đủ tổng số ("Hiện 1.000 / 88.464 kết quả đầu tiên · 230 ms").
   - Đổi tab Slang ↔ Định nghĩa ngay trên màn hình thì Sidebar và tiêu đề cửa sổ đổi theo F1 ↔ F2.
-  - Mỗi target nhớ mode riêng: slang mặc định **Tiền tố**, definition mặc định **Chính xác**. Có dòng giải thích ngắn cho mode đang chọn.
+  - Mỗi target nhớ mode riêng: slang mặc định **Tiền tố**, definition mặc định **Chứa chuỗi** (đổi từ Chính xác khi sửa lỗi L4 của audit). Có dòng giải thích ngắn cho mode đang chọn.
   - Gợi ý "Có phải bạn muốn tìm" dùng cho cả 2 target và mọi mode trừ Gần đúng: slang gợi ý tối đa 5 tên, definition gợi ý 1 câu đã sửa lỗi gõ (`laugh out lound` → `laugh out loud`). Bấm gợi ý là tìm luôn. Logic nằm ở `SearchService.suggestions`.
   - Kết quả tốt nhất được chọn sẵn; khung chi tiết tô màu từ khóa khớp (khi tìm theo definition).
   - Phím: Enter tìm, ↓ xuống bảng, Esc xóa ô tìm, Delete trong bảng = chức năng 6.

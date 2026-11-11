@@ -171,7 +171,10 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     // ----- trạng thái -----
     private SearchTarget target = SearchTarget.SLANG;
-    /** Mỗi target nhớ mode riêng: slang mặc định PREFIX (gõ tới đâu ra tới đó), definition mặc định EXACT. */
+    /**
+     * Mỗi target nhớ mode riêng: slang mặc định PREFIX (gõ tới đâu ra tới đó), definition mặc định SUBSTRING
+     * (đề: "definition có chứa keyword", nên "laugh" phải ra cả "laughing"; khớp nguyên từ vẫn xếp trên).
+     */
     private final Map<SearchTarget, SearchMode> modeByTarget = new EnumMap<>(SearchTarget.class);
     private final Timer liveTimer;
     private final Timer busyTimer;
@@ -208,7 +211,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         this.navigator = Objects.requireNonNull(navigator, "navigator");
         this.executor = Objects.requireNonNull(executor, "executor");
         modeByTarget.put(SearchTarget.SLANG, SearchMode.PREFIX);
-        modeByTarget.put(SearchTarget.DEFINITION, SearchMode.EXACT);
+        modeByTarget.put(SearchTarget.DEFINITION, SearchMode.SUBSTRING);
 
         liveTimer = new Timer(LIVE_DELAY_MS, e -> liveSearch());
         liveTimer.setRepeats(false);
@@ -923,7 +926,11 @@ public class SearchPanel extends JPanel implements FeatureScreen {
      */
     static List<int[]> matchRanges(String text, SearchMode mode, String query) {
         List<String> tokens = new ArrayList<>(new LinkedHashSet<>(Tokenizer.tokens(query)));
-        if (tokens.isEmpty() || mode == SearchMode.FUZZY) {
+        if (tokens.isEmpty()) {
+            // Keyword chỉ gồm ký hiệu/emoji ("&", ":)"): SearchService tìm nguyên chuỗi ở mọi mode → tô nguyên chuỗi
+            return literalRanges(text, query == null ? "" : query.strip());
+        }
+        if (mode == SearchMode.FUZZY) {
             return List.of();
         }
         tokens.sort(Comparator.comparingInt(String::length).reversed()); // ưu tiên từ dài khi chồng nhau
@@ -935,6 +942,20 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             default -> "(?:" + alternatives + ")";
         };
         Matcher matcher = Pattern.compile(regex, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE).matcher(text);
+        List<int[]> ranges = new ArrayList<>();
+        while (matcher.find()) {
+            ranges.add(new int[] {matcher.start(), matcher.end()});
+        }
+        return ranges;
+    }
+
+    /** Mọi chỗ xuất hiện của {@code needle} trong {@code text}, không phân biệt hoa thường, không chồng nhau. */
+    private static List<int[]> literalRanges(String text, String needle) {
+        if (needle.isEmpty()) {
+            return List.of();
+        }
+        Matcher matcher = Pattern.compile(Pattern.quote(needle), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
+                .matcher(text);
         List<int[]> ranges = new ArrayList<>();
         while (matcher.find()) {
             ranges.add(new int[] {matcher.start(), matcher.end()});

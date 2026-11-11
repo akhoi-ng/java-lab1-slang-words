@@ -14,8 +14,10 @@ Từ mục 1 trở xuống giữ nguyên như lúc audit (commit `1b9e890`): s�
 | H1 | Đã sửa | `77a477d` | Dòng không có `` ` `` thành nghĩa mới của entry trước (không nối vào nghĩa cuối như diff đề xuất: 5 dòng vỡ đều là nghĩa riêng, vd. `AMA` → "Against Medical Advice"). File gốc `c863d3f`: 7.656 entry, 8.959 cặp, khớp `fix_slang.py` |
 | M1 | Đã sửa | `7135a94` | Chỉ giữ khóa lúc `snapshot()` (100k: 80–240 ms), serialize ngoài khóa. 100k khi đang ghi: tìm 0–36 ms, add 0 ms |
 | M2 | Đã sửa | `7135a94` | Chỉ thêm từ mới vào BK-tree từ vựng, build ba nhóm index song song. Reset 100k: 0,46–0,71 s (1 CPU: 0,8–1,25 s) |
-| M3 | Đã sửa (chưa commit) | | Kết quả tìm-khi-gõ được ghi khi ngừng gõ 1,5 s, khi chuyển vào bảng kết quả, hoặc khi rời màn hình Search. Gõ tiếp/xóa ô tìm/Enter thì hủy, nên không ghi chữ gõ dở và không ghi hai lần. Sửa cả dòng gợi ý và màn hình Lịch sử trống. Chạy jar thật, gõ phím tự động (KeyEvent vào hàng đợi sự kiện của app): gõ xong → vào lịch sử 1.640 ms; nhấn ↓ → 47 ms; Ctrl+3 → 153 ms; gõ chậm o-m-g chỉ ghi `omg`; `history.dat` sau Ctrl+Q đủ 5 dòng. Bản trước khi sửa: chờ 5 s vẫn không ghi |
-| L1–L5 | Chưa sửa | | |
+| M3 | Đã sửa | `006d7b0` | Kết quả tìm-khi-gõ được ghi khi ngừng gõ 1,5 s, khi chuyển vào bảng kết quả, hoặc khi rời màn hình Search. Gõ tiếp/xóa ô tìm/Enter thì hủy, nên không ghi chữ gõ dở và không ghi hai lần. Sửa cả dòng gợi ý và màn hình Lịch sử trống. Chạy jar thật, gõ phím tự động (KeyEvent vào hàng đợi sự kiện của app): gõ xong → vào lịch sử 1.640 ms; nhấn ↓ → 47 ms; Ctrl+3 → 153 ms; gõ chậm o-m-g chỉ ghi `omg`; `history.dat` sau Ctrl+Q đủ 5 dòng. Bản trước khi sửa: chờ 5 s vẫn không ghi |
+| L1, L2, L5 | Chưa sửa | | |
+| L3 | Đã sửa (chưa commit) | | Nút mặc định của hộp xác nhận xóa là "Hủy". Chạy jar thật: Delete → Enter thì slang vẫn còn; bấm "Xóa" thì mất đúng 1 slang |
+| L4 | Đã sửa (chưa commit) | | F2 mặc định "Chứa chuỗi" (`laugh` ra 117 kết quả, 78 có `laughing`). Keyword không có chữ/số thì tìm nguyên chuỗi trong nghĩa ở mọi mode (`&`: 14 kết quả, có tô sáng; 100k: 12–27 ms) |
 
 Mục 6 (tài liệu nói khác code):
 

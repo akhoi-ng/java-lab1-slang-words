@@ -42,7 +42,8 @@ class SearchPanelTest {
                 new SlangEntry(0, "LOL", List.of("Laughing out loud")),
                 new SlangEntry(1, "lol", List.of("Lots of love")),
                 new SlangEntry(2, "LOLZ", List.of("Plural of lol, laugh")),
-                new SlangEntry(3, "BRB", List.of("Be right back"))));
+                new SlangEntry(3, "BRB", List.of("Be right back")),
+                new SlangEntry(4, "&&", List.of("And & and"))));
         onEdt(() -> {
             panel = new SearchPanel(new SearchService(() -> dictionary), navigated::add, Runnable::run);
             panel.setSearchListener(history::add);
@@ -145,11 +146,21 @@ class SearchPanelTest {
     void openingViaF2SwitchesToDefinitionWithoutNavigatingAgain() throws Exception {
         onEdt(() -> panel.onShown(Feature.SEARCH_DEFINITION));
         assertEquals(SearchTarget.DEFINITION, panel.target());
-        assertEquals(SearchMode.EXACT, panel.modeCombo().getSelectedItem()); // definition mặc định EXACT
+        assertEquals(SearchMode.SUBSTRING, panel.modeCombo().getSelectedItem()); // definition mặc định "Chứa"
         assertTrue(navigated.isEmpty());
 
         typeAndPressEnter("laugh");
-        assertEquals(List.of("LOLZ"), slangColumn()); // "Laughing" không phải nguyên từ "laugh"
+        // "laugh" ra cả "Laughing out loud"; LOLZ có nguyên từ "laugh" nên đứng đầu
+        assertEquals(List.of("LOLZ", "LOL"), slangColumn());
+    }
+
+    @Test
+    void definitionKeywordMadeOfSymbolsFindsAndHighlightsTheRawText() throws Exception {
+        onEdt(() -> panel.onShown(Feature.SEARCH_DEFINITION));
+        typeAndPressEnter("&");
+        assertEquals(List.of("&&"), slangColumn());
+        assertEquals(List.of("8-9"), ranges("Rock n' & roll", SearchMode.EXACT, " & "));
+        assertEquals(List.of("0-2", "3-5"), ranges(":) :)", SearchMode.FUZZY, ":)"));
     }
 
     @Test
@@ -163,7 +174,7 @@ class SearchPanelTest {
     void eachTargetRemembersItsOwnMode() throws Exception {
         onEdt(() -> panel.modeCombo().setSelectedItem(SearchMode.FUZZY)); // slang → FUZZY
         onEdt(() -> panel.onShown(Feature.SEARCH_DEFINITION));
-        assertEquals(SearchMode.EXACT, panel.modeCombo().getSelectedItem());
+        assertEquals(SearchMode.SUBSTRING, panel.modeCombo().getSelectedItem());
         onEdt(() -> panel.onShown(Feature.SEARCH_SLANG));
         assertEquals(SearchMode.FUZZY, panel.modeCombo().getSelectedItem());
     }

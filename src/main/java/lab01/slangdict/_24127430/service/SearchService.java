@@ -251,7 +251,8 @@ public class SearchService {
         List<String> queryTokens = Tokenizer.tokens(query); // giữ thứ tự để so khớp cả cụm
         Set<String> distinctTokens = new LinkedHashSet<>(queryTokens); // "love love" chỉ tính "love" một lần
         if (distinctTokens.isEmpty()) {
-            return new HashMap<>();
+            // Keyword chỉ gồm ký hiệu/emoji ("&", ":)", "😂") không có từ nào để tra index → tìm nguyên chuỗi
+            return searchDefinitionsLiterally(dictionary, query);
         }
 
         // 1) Mỗi từ của query → (id → điểm của từ đó)
@@ -287,6 +288,36 @@ public class SearchService {
                 if (containsPhrase(dictionary.get(candidate.getKey()), queryTokens)) {
                     candidate.setValue(candidate.getValue() + SCORE_PHRASE);
                 }
+            }
+        }
+        return scores;
+    }
+
+    /**
+     * Keyword không có chữ/số nào: duyệt mọi entry, giữ entry có nghĩa chứa nguyên chuỗi keyword (không phân biệt
+     * hoa thường), ở mọi mode. Nghĩa trùng đúng keyword được xếp trên. O(tổng độ dài các nghĩa): 100k slang vẫn
+     * dưới 100 ms, và chỉ chạy với loại keyword hiếm này.
+     */
+    private static Map<Integer, Integer> searchDefinitionsLiterally(SlangDictionary dictionary, String query) {
+        Map<Integer, Integer> scores = new HashMap<>();
+        String needle = query.strip().toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) {
+            return scores;
+        }
+        for (SlangEntry entry : dictionary.all()) {
+            int best = 0;
+            for (String meaning : entry.getMeanings()) {
+                String lower = meaning.toLowerCase(Locale.ROOT);
+                if (lower.equals(needle)) {
+                    best = SCORE_PHRASE;
+                    break;
+                }
+                if (lower.contains(needle)) {
+                    best = SCORE_WORD_EXACT;
+                }
+            }
+            if (best > 0) {
+                scores.put(entry.getId(), best);
             }
         }
         return scores;

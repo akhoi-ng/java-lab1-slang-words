@@ -200,7 +200,10 @@ public final class EntryActions {
             return ConflictDialog.show(parent, conflict);
         }
 
-        /** Hộp xác nhận hiện tên và các nghĩa sắp bị xóa; nút mặc định là "Xóa" (đã chủ động bấm Xóa/Delete). */
+        /**
+         * Hộp xác nhận hiện tên và các nghĩa sắp bị xóa. Nút mặc định (focus, Enter) là "Hủy": xóa không hoàn tác
+         * được, nên lỡ nhấn Delete rồi Enter cũng không mất slang. Muốn xóa phải bấm "Xóa" (hoặc Tab rồi Enter).
+         */
         @Override
         public boolean confirmDelete(Component parent, SlangEntry entry) {
             StringBuilder html = new StringBuilder("<html><body style='width:380px'>")
@@ -213,7 +216,7 @@ public final class EntryActions {
             Object[] options = {Messages.get("delete.button"), Messages.get("common.cancel")};
             int choice = JOptionPane.showOptionDialog(parent, new JLabel(html.toString()),
                     Messages.get("delete.confirm.title"), JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE,
-                    null, options, options[0]);
+                    null, options, options[1]);
             return choice == 0;
         }
 

@@ -248,6 +248,29 @@ class SearchServiceTest {
         assertEquals(Set.of(1, 2, 8), idSet(search.search(DEFINITION, SearchMode.FUZZY, "of", ALL)));
     }
 
+    @Test
+    void definitionKeywordWithoutLettersOrDigitsMatchesTheRawText() {
+        SlangDictionary dictionary = SlangDictionary.build(List.of(
+                new SlangEntry(0, "&", List.of("And")),
+                new SlangEntry(1, "R&B", List.of("Rhythm & blues")),
+                new SlangEntry(2, "AMP", List.of("&")),
+                new SlangEntry(3, "XD", List.of("Big laugh :)", "😂 tears of joy")),
+                new SlangEntry(4, "lol", List.of("Laughing out loud"))));
+        SearchService search = service(dictionary);
+        for (SearchMode mode : SearchMode.values()) {
+            SearchOutcome amp = search.search(DEFINITION, mode, " & ", ALL);
+            assertEquals(List.of(2, 1), ids(amp), mode + ": nghĩa đúng bằng '&' xếp trên nghĩa chỉ chứa '&'");
+            SearchOutcome first = search.search(DEFINITION, mode, "&", 1);
+            assertEquals(List.of(2), ids(first));
+            assertEquals(2, first.totalMatches());
+            assertEquals(List.of(3), ids(search.search(DEFINITION, mode, ":)", ALL)), mode.name());
+            assertEquals(List.of(3), ids(search.search(DEFINITION, mode, "😂", ALL)), mode.name());
+            assertTrue(search.search(DEFINITION, mode, "!?", ALL).isEmpty(), mode.name());
+        }
+        // Có chữ/số thì vẫn đi qua index như cũ: "& blues" chỉ tra từ "blues"
+        assertEquals(List.of(1), ids(search.search(DEFINITION, SearchMode.EXACT, "& blues", ALL)));
+    }
+
     // ---------------- gợi ý "Có phải bạn muốn tìm" ----------------
 
     @Test
