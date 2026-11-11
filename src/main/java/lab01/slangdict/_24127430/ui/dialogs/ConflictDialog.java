@@ -40,6 +40,7 @@ import lab01.slangdict._24127430.model.SlangEntry;
 import lab01.slangdict._24127430.service.ConflictResolver.Conflict;
 import lab01.slangdict._24127430.service.ConflictResolver.Decision;
 import lab01.slangdict._24127430.service.ConflictResolver.Operation;
+import lab01.slangdict._24127430.ui.PlainText;
 import lab01.slangdict._24127430.ui.ThemeManager;
 
 /**
@@ -166,7 +167,7 @@ public final class ConflictDialog {
                     SlangEntry entry = (SlangEntry) value;
                     setText(html("<b>" + escape(entry.getSlang()) + "</b>&nbsp;&nbsp;"
                             + escape(entry.getMeaningText())));
-                    setToolTipText(entry.getMeaningText());
+                    setToolTipText(PlainText.tooltip(entry.getMeaningText()));
                     setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
                     if (!many) {
                         setForeground(ThemeManager.color("Label.foreground", Color.BLACK));

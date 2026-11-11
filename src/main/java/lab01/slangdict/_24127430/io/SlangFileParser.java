@@ -75,7 +75,8 @@ public final class SlangFileParser {
             if (lineNumber == 1 && !line.isEmpty() && line.charAt(0) == BOM) {
                 line = line.substring(1);
             }
-            if (line.isBlank() || (lineNumber == 1 && line.strip().equalsIgnoreCase(HEADER))) {
+            // Header chỉ được nhận khi chưa có entry nào (có thể đứng sau vài dòng trống), không chỉ ở dòng 1
+            if (line.isBlank() || (entries.isEmpty() && line.strip().equalsIgnoreCase(HEADER))) {
                 continue;
             }
             if (line.indexOf(SLANG_SEPARATOR) < 0 && !entries.isEmpty()) {

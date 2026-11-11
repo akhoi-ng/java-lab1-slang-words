@@ -104,7 +104,7 @@ public final class ResetAction implements Runnable {
                 SlangDictionary fresh = service.loadOriginal();
                 long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
                 edt.execute(() -> finish(fresh, elapsed, clearHistory));
-            } catch (Exception e) { // IOException, SlangFormatException, hay lỗi bất ngờ khi build
+            } catch (Exception | Error e) { // IOException, SlangFormatException, lỗi bất ngờ khi build, hết bộ nhớ
                 edt.execute(() -> fail(e));
             }
         });
@@ -125,7 +125,7 @@ public final class ResetAction implements Runnable {
         ui.showDone(service.size(), elapsedMillis, clearHistory);
     }
 
-    private void fail(Exception error) {
+    private void fail(Throwable error) {
         System.err.println("[ResetAction] cannot load the original dictionary: " + error);
         running = false;
         ui.setBusy(false);

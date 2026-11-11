@@ -64,13 +64,13 @@ Sau khi sửa: `.\mvnw.cmd package` 272/272 test pass, jar build lại lúc 14:2
 | N2 | Medium | Đã sửa (tài liệu) | `slang.txt` đặt cạnh jar không được đọc (app chỉ đọc `data/slang.txt`), người chấm thay file đó sẽ không thấy gì đổi. Thêm hướng dẫn vào `24127430_TuChamDiem.txt` và `README.md` mục 1 |
 | N3 | Low | Đã sửa | F8: mở màn hình thì focus ở "Random khác", Enter bấm nút đó thay vì "Tra trong từ điển" như tooltip ghi. Sửa: gỡ Enter khỏi input map của ba nút. Test `RandomPanelTest.enterOnTheFocusedRandomButtonLooksUpInsteadOfDrawingAnotherSlang` |
 | N4 | Low | Không sửa | Sau "Tra trong từ điển" (F8) hoặc tìm lại từ Lịch sử, F1 giữ kiểu khớp của lần đó (ví dụ "Chính xác") nên gõ không còn ra kết quả ngay; combo vẫn hiện đúng kiểu đang dùng |
-| N5 | Low | Không sửa | `ResetAction` chỉ bắt `Exception`: gặp `Error` (hết bộ nhớ) lúc build thì cửa sổ bị khóa. Chỉ đọc code, chưa tái hiện |
-| N6 | Low | Không sửa | Ở 100k, đóng app rồi mở lại trong khoảng 1 s có thể gặp dialog "đang mở ở cửa sổ khác" (lần ghi cuối mất 1,1 s, khóa còn giữ). Không mất dữ liệu |
-| N7 | Low | Không sửa | Tooltip danh sách trong `ConflictDialog` chưa qua `PlainText.tooltip`; dòng header `` Slag`Meaning `` không nằm ở dòng 1 thành một slang tên "Slag" |
+| N5 | Low | Đã sửa | `ResetAction` chỉ bắt `Exception`: gặp `Error` (hết bộ nhớ) lúc build thì cửa sổ bị khóa. Sửa: bắt `Exception \| Error`, báo lỗi và mở khóa cửa sổ |
+| N6 | Low | Đã sửa | Ở 100k, đóng app rồi mở lại trong khoảng 1 s có thể gặp dialog "đang mở ở cửa sổ khác" (lần ghi cuối mất 1,1 s, khóa còn giữ). Sửa: `App.acquireInstanceLock` thử lại tới khoảng 3 s (15 × 200 ms) trước khi báo |
+| N7 | Low | Đã sửa | Tooltip danh sách trong `ConflictDialog` chưa qua `PlainText.tooltip`; dòng header `` Slag`Meaning `` không nằm ở dòng 1 thành một slang tên "Slag". Sửa: tooltip qua `PlainText.tooltip`; header được bỏ qua khi chưa có entry nào (kể cả sau dòng trống) |
 
 Tài liệu lệch code đã sửa cùng lúc: `README.md` (`Set<Integer>` thay cho `List<Integer>`, số test, số dòng code), `docs/PLAN.md` (số commit, giờ build jar, số test), `docs/ARCHITECTURE.md` (parser bỏ qua dòng lỗi, phím Enter ở F8, số test).
 
-Sau khi sửa: `.\mvnw.cmd package` 275/275 test pass, jar build lại lúc 19:05 ngày 11/11.
+Sau khi sửa: `.\mvnw.cmd package` 275/275 test pass, jar build lại lúc 19:05 ngày 11/11. Sửa N5–N7: 275/275 test pass, jar build lại lúc 19:19 ngày 11/11. N4 giữ nguyên vì là hành vi có chủ ý: combo hiện đúng kiểu khớp đang dùng.
 
 ## 1. Tóm tắt
 

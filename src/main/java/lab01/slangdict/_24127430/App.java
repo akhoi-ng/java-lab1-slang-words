@@ -63,6 +63,8 @@ public final class App {
     /** Giữ khóa data/ suốt lúc app chạy (field static để không bị thu gom rác làm nhả khóa); OS tự nhả khi thoát. */
     @SuppressWarnings("unused")
     private static InstanceLock instanceLock;
+    private static final int LOCK_ATTEMPTS = 15;
+    private static final long LOCK_RETRY_MILLIS = 200;
 
     private App() {
     }
@@ -194,11 +196,17 @@ public final class App {
     private static boolean acquireInstanceLock(SettingsStore settings) {
         Path dataDir = AppPaths.dataDir();
         try {
-            Optional<InstanceLock> lock = InstanceLock.tryAcquire(dataDir);
-            if (lock.isPresent()) {
-                instanceLock = lock.get();
-                return true;
+            // Thử lại tới khoảng 3 s: cửa sổ vừa đóng có thể còn đang ghi lần cuối (100k: khoảng 1,1 s) nên chưa nhả khóa
+            for (int attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+                Optional<InstanceLock> lock = InstanceLock.tryAcquire(dataDir);
+                if (lock.isPresent()) {
+                    instanceLock = lock.get();
+                    return true;
+                }
+                Thread.sleep(LOCK_RETRY_MILLIS);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         } catch (IOException e) {
             // Không mở được file khóa (hiếm, vì data/ đã được thử ghi): vẫn cho chạy, chỉ mất phần bảo vệ này
             System.err.println("[App] cannot lock the data folder, running without the single-instance check: " + e);
