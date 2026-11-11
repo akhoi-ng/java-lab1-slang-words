@@ -359,7 +359,8 @@ có dictionary.dat? ──có──► load ──OK──► dùng luôn (Sourc
 **Ghi nền (`saveInBackground`):**
 - Đo thực tế: serialize và ghi 100k slang mất khoảng 1,3 giây. Nếu ghi trên EDT thì mỗi lần add/edit/delete giao diện sẽ đứng chừng ấy thời gian. Vì vậy có **một** luồng nền riêng (`ExecutorService` một luồng) lo việc serialize và ghi; `saveInBackground` trả về ngay.
 - **Gộp các lần lưu dồn dập:** mỗi yêu cầu nhận một số thứ tự (`AtomicLong`). Khi đến lượt chạy, nếu đã có yêu cầu mới hơn thì bỏ qua và để lần mới nhất ghi. Xóa 10 entry liên tiếp chỉ ghi 1–2 lần chứ không phải 10.
-- **Hoãn ghi 1,5 s (thêm ở bước 10):** trong lúc serialize, luồng ghi giữ khóa của từ điển. Nếu ghi ngay sau mỗi lần sửa thì lần tìm lại ngay sau đó (để hiện entry vừa sửa) phải đứng chờ khoảng 2 s ở bản 100k. Vì vậy app dùng `ScheduledThreadPoolExecutor`: mỗi yêu cầu hẹn ghi sau 1,5 s, yêu cầu mới thì dời giờ (debounce). Lần tìm lại xong trước, việc ghi rơi vào lúc người dùng đang đọc kết quả. Constructor 2 tham số vẫn ghi ngay (test dùng).
+- **Chép rồi mới serialize (sửa lỗi M1 trong `AUDIT_REPORT.md`):** trước đây luồng ghi serialize thẳng từ điển trong khóa `synchronized` (100k: 1–3 s), nên lần tìm hoặc add/edit/delete rơi vào lúc đó phải đứng chờ (đo được: tìm ~2 s, EDT đơ ~1,7 s). Giờ luồng ghi gọi `SlangDictionary.snapshot()`: **chỉ trong khóa** chép entry và mọi index (`Trie.copy`, `BKTree.copy`, `InvertedIndex.copy`: chép cấu trúc bằng vòng lặp, giữ đúng hình dạng cây kể cả nút xóa mềm, không tính lại Levenshtein hay tách từ). 100k mất 90–200 ms. Sau đó serialize **bản chép** ở ngoài khóa. Đo lại ở 100k khi luồng ghi đang serialize: tìm 0–36 ms, add 0 ms. Định dạng file không đổi. Tốn thêm tạm thời một bản từ điển trong bộ nhớ trong lúc ghi.
+- **Hoãn ghi 1,5 s (thêm ở bước 10):** `ScheduledThreadPoolExecutor`, mỗi yêu cầu hẹn ghi sau 1,5 s, yêu cầu mới thì dời giờ (debounce). Sửa liên tục chỉ tốn một lần chép + serialize, và lần tìm lại ngay sau khi sửa không trùng lúc chép. Constructor 2 tham số vẫn ghi ngay (test dùng).
 - Lỗi ghi được báo qua `errorListener` (hiện thông báo trên UI) thay vì làm sập app. Luồng ghi bắt cả `IOException`, `RuntimeException` lẫn `Error` (ví dụ `StackOverflowError`): nếu không, executor giữ `Error` trong `Future` mà không ai đọc, và mọi lần lưu sau đó thất bại im lặng.
 - Khi thoát, shutdown hook gọi `close()` → `flush()`: **ghi ngay** lần đang hẹn giờ (không chờ hết 1,5 s) rồi chờ ghi xong.
 
@@ -429,7 +430,12 @@ Sau đó gọi `Collections.sort(results)`, và `SearchResult.compareTo` lo ph�
 - **Seed cố định** (MSSV `24127430`): chạy lại luôn ra đúng file cũ, nên số đo lặp lại được.
 - Cách chạy: `java -cp target\slang-dictionary.jar lab01.slangdict._24127430.tools.BigDataGenerator [số lượng] [file ra]`.
 
-**Kết quả đo (100k slang, lần gọi đầu tiên, máy dev):** build index khoảng 1,6–2,1 s (chỉ một lần, sau đó đọc `.dat`).
+**Kết quả đo (100k slang, lần gọi đầu tiên, máy dev):** build index khoảng 0,45–0,6 s (trước khi sửa lỗi M2: 1,6–2,1 s). Build chỉ chạy lần đầu và khi Reset (F7), các lần mở sau đọc `.dat`.
+
+**Build index (sửa lỗi M2 trong `AUDIT_REPORT.md`, Reset 100k mất 1,9–2,1 s):** đo từng phần ở 100k thì thấy:
+- BK-tree từ vựng mất ~0,5 s dù chỉ có 4.848 từ khác nhau: `index()` gọi `vocabularyTree.add(word)` cho **mỗi lần xuất hiện** của từ (hàng trăm nghìn lần), mỗi lần đi hết một đường phép Levenshtein chỉ để thấy từ đã có. Giờ chỉ thêm khi từ chưa có trong `wordIndex` → ~10 ms. Tên mới cũng vậy (chỉ thêm vào BK-tree tên khi `idsByName` chưa có tên đó).
+- `build()` dựng ba nhóm index **song song** vì chúng không dùng chung field nào: luồng gọi lo `entries`/`idList`/`idsByName`/`nameTrie`; `CompletableFuture` thứ hai dựng BK-tree tên (phần tốn nhất còn lại, ~0,3–0,5 s); thứ ba lo `wordIndex` + BK-tree từ vựng. Mỗi luồng chèn đúng thứ tự như khi dựng tuần tự nên kết quả giống hệt (test `parallelBuildMatchesOneByOneAdds`); `join()` ở cuối tạo quan hệ happens-before để luồng gọi thấy dữ liệu các luồng kia đã ghi.
+- Reset 100k (parse + build, 6 lượt): 12 CPU 0,45–0,71 s · 2 CPU 0,6–0,8 s · 1 CPU 0,8–1,25 s (đo bằng `-XX:ActiveProcessorCount`).
 
 | Target | Mode | Query | Số kết quả | Thời gian |
 |---|---|---|---|---|
@@ -698,7 +704,7 @@ Có nhiều entry cùng tên thì người dùng chọn **entry đích** trong d
 
 **`SearchPanel` sau khi dữ liệu đổi:** `showChange(entry, …)` tìm lại lần tìm đang hiện và chọn sẵn entry theo **id**; nếu entry không còn khớp (ví dụ vừa đổi tên) thì tự tìm theo tên mới. `showRemoval` chọn dòng ở đúng chỗ vừa xóa. Dòng chọn được truyền kèm yêu cầu tìm (record `Selection`) chứ không để trong field, vì kết quả về trễ trên luồng khác. Thông báo lưu dạng key + tham số nên đổi ngôn ngữ vẫn dịch lại được, và tự mất khi người dùng tìm tiếp.
 
-**Thời gian tìm hiển thị:** `SearchService` bắt đầu đo **sau khi** lấy được khóa từ điển. Nếu luồng ghi `.dat` đang giữ khóa thì lần tìm phải chờ, nhưng con số trên màn hình vẫn là thời gian tìm thật (test `elapsedTimeDoesNotCountWaitingForTheSaveLock`).
+**Thời gian tìm hiển thị:** `SearchService` bắt đầu đo **sau khi** lấy được khóa từ điển. Luồng ghi `.dat` chỉ giữ khóa trong lúc chép từ điển (100k: tối đa ~200 ms, mục 4.8), nên lần tìm trùng lúc đó chờ nhiều nhất chừng ấy; con số trên màn hình vẫn là thời gian tìm thật (test `elapsedTimeDoesNotCountWaitingForTheSaveLock`).
 
 **Giới hạn còn lại (chỉ ở 100k):** nếu đúng lúc luồng ghi đang serialize (~2 s) mà người dùng thêm/sửa/xóa tiếp, thao tác đó chờ ghi xong. Muốn bỏ hẳn thì phải ghi nhật ký thay đổi (journal) thay vì serialize cả từ điển mỗi lần.
 
@@ -720,7 +726,7 @@ Ctrl+7 / Sidebar / menu Tệp → ResetAction.run()                       (EDT)
 ```
 
 - **Reset = thay cả object**, không xóa từng entry rồi thêm lại. Mọi nơi đọc từ điển đều đi qua `dictionaryService::current` (một `Supplier`, mục 4.9), nên chỉ cần gán lại **một field**. Field là `volatile` để luồng tìm kiếm thấy ngay object mới. Lần tìm đang chạy dở trên object cũ vẫn xong bình thường vì object cũ không bị ai sửa.
-- **Build trên luồng nền:** 7,6k slang mất ~0,1 s nhưng file 100k mất ~1,5 s, làm trên EDT thì cửa sổ đứng. Từ điển cũ không bị đụng tới trong lúc build, nên file gốc lỗi (thiếu, sai định dạng) chỉ làm hiện thông báo lỗi; từ điển và lịch sử giữ nguyên.
+- **Build trên luồng nền:** 7,6k slang mất ~0,1 s, file 100k mất ~0,5–0,7 s (trước khi sửa lỗi M2: 1,9–2,1 s, xem mục "Build index" ở 4.10), làm trên EDT thì cửa sổ đứng. Từ điển cũ không bị đụng tới trong lúc build, nên file gốc lỗi (thiếu, sai định dạng) chỉ làm hiện thông báo lỗi; từ điển và lịch sử giữ nguyên.
 - **Khóa cửa sổ** (`frame.setEnabled(false)`) trong lúc build: nếu không, người dùng có thể kịp mở dialog Sửa trên entry sắp biến mất.
 - Dialog: nút mặc định (Enter) là **Hủy**, checkbox "Xóa cả lịch sử" mặc định **không** chọn (lịch sử trống thì checkbox bị tắt). Dialog ghi rõ đang có bao nhiêu slang và file gốc nằm ở đâu.
 - `ResetAction` nhận hai `Executor` (luồng nền, EDT) và một interface `Ui`. App truyền luồng mới + `SwingUtilities::invokeLater` + dialog thật; test truyền `Runnable::run` + giao diện giả nên chạy hết luồng mà không mở cửa sổ nào.

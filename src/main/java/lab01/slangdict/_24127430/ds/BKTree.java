@@ -134,4 +134,43 @@ public class BKTree<T> implements Serializable {
     public int size() {
         return size;
     }
+
+    /**
+     * Bản sao độc lập có đúng hình dạng cây (kể cả nút xoá mềm), dùng chung các phần tử (nên bất biến, ví dụ String).
+     * Chỉ chép cấu trúc, không tính lại khoảng cách nào: O(số nút). Duyệt bằng ngăn xếp, không đệ quy.
+     */
+    public BKTree<T> copy() {
+        BKTree<T> copy = new BKTree<>(metric);
+        copy.size = size;
+        if (root == null) {
+            return copy;
+        }
+        copy.root = copyNode(root);
+        Deque<Node<T>[]> stack = new ArrayDeque<>(); // cặp {nút gốc, nút bản sao}
+        stack.push(pair(root, copy.root));
+        while (!stack.isEmpty()) {
+            Node<T>[] pair = stack.pop();
+            if (pair[0].children == null) {
+                continue;
+            }
+            pair[1].children = new HashMap<>(Math.max(4, pair[0].children.size() * 4 / 3 + 1));
+            for (Map.Entry<Integer, Node<T>> child : pair[0].children.entrySet()) {
+                Node<T> childCopy = copyNode(child.getValue());
+                pair[1].children.put(child.getKey(), childCopy);
+                stack.push(pair(child.getValue(), childCopy));
+            }
+        }
+        return copy;
+    }
+
+    private static <T> Node<T> copyNode(Node<T> node) {
+        Node<T> copy = new Node<>(node.item);
+        copy.deleted = node.deleted;
+        return copy;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Node<T>[] pair(Node<T> source, Node<T> copy) {
+        return new Node[] {source, copy};
+    }
 }

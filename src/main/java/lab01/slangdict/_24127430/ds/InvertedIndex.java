@@ -70,4 +70,12 @@ public class InvertedIndex<K extends Comparable<? super K>, V> implements Serial
     public void clear() {
         postings.clear();
     }
+
+    /** Bản sao độc lập (mỗi tập value được chép riêng), dùng chung key và value. O(tổng số value). */
+    public InvertedIndex<K, V> copy() {
+        InvertedIndex<K, V> copy = new InvertedIndex<>();
+        copy.postings.putAll(postings); // từ một SortedMap cùng thứ tự vào TreeMap rỗng: dựng cây O(n), không so sánh
+        copy.postings.replaceAll((key, values) -> new HashSet<>(values));
+        return copy;
+    }
 }

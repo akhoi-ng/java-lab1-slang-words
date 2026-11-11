@@ -306,7 +306,7 @@ public class DictionaryService {
 
     /**
      * Build một từ điển mới từ slang.txt gốc (data/slang.txt nếu có, không thì bản nhúng trong jar). Không đụng tới
-     * từ điển hiện tại, nên gọi được trên luồng nền (7,6k slang: ~0,1 s; file 100k: ~1,5 s).
+     * từ điển hiện tại, nên gọi được trên luồng nền (7,6k slang: ~0,1 s; file 100k: ~0,5–0,7 s).
      *
      * @throws SlangFormatException file gốc sai định dạng (kèm số dòng)
      * @throws IOException          không đọc được file gốc

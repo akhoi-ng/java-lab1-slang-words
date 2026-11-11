@@ -210,4 +210,67 @@ class DataStructuresTest {
         assertTrue(tree.contains("lol"));
         assertEquals(5, tree.size());
     }
+
+    // ---------------- copy() (luồng ghi .dat chép từ điển rồi serialize bản chép) ----------------
+
+    @Test
+    void bkTreeCopyKeepsSoftDeletesAndIsIndependent() {
+        List<String> words = randomWords(1000, 11);
+        BKTree<String> tree = new BKTree<>(LEV);
+        words.forEach(tree::add);
+        words.subList(0, 100).forEach(tree::remove);
+        BKTree<String> copy = tree.copy();
+        assertEquals(tree.size(), copy.size());
+        for (String query : List.of("abc", "eeeee", "a", words.get(5), words.get(500))) {
+            for (int k = 0; k <= 2; k++) {
+                assertEquals(new HashSet<>(tree.search(query, k)), new HashSet<>(copy.search(query, k)),
+                        "query=" + query + " k=" + k);
+            }
+        }
+
+        copy.add(words.get(5));    // khôi phục nút xoá mềm trong bản chép
+        copy.remove(words.get(500));
+        copy.add("zzzzzzzz");
+        assertFalse(tree.contains(words.get(5)));
+        assertTrue(tree.contains(words.get(500)));
+        assertFalse(tree.contains("zzzzzzzz"));
+        assertEquals(0, new BKTree<String>(LEV).copy().size());
+    }
+
+    @Test
+    void trieCopyKeepsValueOrderAndIsIndependent() {
+        Trie<Integer> trie = new Trie<>();
+        trie.put("x".repeat(50_000), 9); // không đệ quy theo độ dài key
+        trie.put("lol", 3);
+        trie.put("lol", 2);
+        trie.put("l", 4);
+        Trie<Integer> copy = trie.copy();
+        assertEquals(trie.keyCount(), copy.keyCount());
+        assertEquals(List.of(4, 3, 2), copy.valuesWithPrefix("l", 10));
+        assertEquals(Set.of(9), copy.get("x".repeat(50_000)));
+
+        copy.remove("lol", 3);
+        copy.put("lmao", 5);
+        assertEquals(List.of(4, 3, 2), trie.valuesWithPrefix("l", 10));
+        assertEquals(List.of(4, 5, 2), copy.valuesWithPrefix("l", 10));
+    }
+
+    @Test
+    void invertedIndexCopyIsIndependent() {
+        InvertedIndex<String, Integer> index = new InvertedIndex<>();
+        index.add("love", 1);
+        index.add("love", 2);
+        index.add("loud", 3);
+        InvertedIndex<String, Integer> copy = index.copy();
+        assertEquals(List.of("loud", "love"), new ArrayList<>(copy.keys()));
+        assertEquals(Set.of(1, 2), copy.get("love"));
+
+        copy.remove("love", 1);
+        copy.remove("loud", 3);
+        copy.add("lovely", 4);
+        assertEquals(Set.of(1, 2), index.get("love"));
+        assertTrue(index.containsKey("loud"));
+        assertFalse(index.containsKey("lovely"));
+        assertEquals(List.of("love", "lovely"), new ArrayList<>(copy.keys()));
+    }
 }

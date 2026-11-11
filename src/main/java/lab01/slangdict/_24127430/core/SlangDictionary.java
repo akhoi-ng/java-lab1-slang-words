@@ -17,6 +17,8 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 import lab01.slangdict._24127430.ds.BKTree;
 import lab01.slangdict._24127430.ds.InvertedIndex;
@@ -44,10 +46,10 @@ import lab01.slangdict._24127430.model.SlangEntry;
  * {@link #add}, {@link #replace}, {@link #remove}; ba method này luôn gỡ/gắn index theo cặp
  * {@link #unindex}/{@link #index}. Test so sánh với một từ điển build lại từ đầu để kiểm chứng.
  * <p>
- * <b>Luồng:</b> đọc và sửa trên một luồng duy nhất (EDT). Ngoại lệ là luồng ghi nền của DictionaryStore
- * serialize từ điển song song. Để bản ghi luôn nhất quán, {@link #writeObject} và ba method sửa dữ liệu
- * cùng {@code synchronized} trên chính object này (giống cách {@code java.util.Vector} làm):
- * đang serialize thì việc sửa phải chờ, và ngược lại. Đọc song song với serialize thì an toàn vì cả hai chỉ đọc.
+ * <b>Luồng:</b> đọc và sửa trên một luồng duy nhất (EDT). Ngoại lệ là luồng ghi nền của DictionaryStore: nó gọi
+ * {@link #snapshot} để chép từ điển rồi serialize bản chép ở ngoài khóa. Để bản chép luôn nhất quán,
+ * {@link #snapshot}, {@link #writeObject} và ba method sửa dữ liệu cùng {@code synchronized} trên chính object này
+ * (giống cách {@code java.util.Vector} làm): đang chép thì việc sửa phải chờ (vài chục ms), và ngược lại.
  * Ai đọc từ một luồng khác EDT (ví dụ {@code SearchService} chạy trên luồng tìm kiếm của màn hình Search) thì
  * phải đọc bên trong {@code synchronized (dictionary)} để không gặp lúc EDT đang sửa dở.
  */
@@ -61,16 +63,46 @@ public class SlangDictionary implements Serializable {
     private final Map<Integer, Integer> positionOf = new HashMap<>();
 
     private final Map<String, Set<Integer>> idsByName = new HashMap<>();
-    private final Trie<Integer> nameTrie = new Trie<>();
-    private final BKTree<String> nameTree = new BKTree<>(Levenshtein.INSTANCE);
+    private final Trie<Integer> nameTrie;
+    private final BKTree<String> nameTree;
 
-    private final InvertedIndex<String, Integer> wordIndex = new InvertedIndex<>();
-    private final BKTree<String> vocabularyTree = new BKTree<>(Levenshtein.INSTANCE);
+    private final InvertedIndex<String, Integer> wordIndex;
+    private final BKTree<String> vocabularyTree;
 
     private int nextId;
 
     /** Từ điển rỗng. */
     public SlangDictionary() {
+        this(new Trie<>(), new BKTree<>(Levenshtein.INSTANCE), new InvertedIndex<>(),
+                new BKTree<>(Levenshtein.INSTANCE));
+    }
+
+    private SlangDictionary(Trie<Integer> nameTrie, BKTree<String> nameTree, InvertedIndex<String, Integer> wordIndex,
+                            BKTree<String> vocabularyTree) {
+        this.nameTrie = nameTrie;
+        this.nameTree = nameTree;
+        this.wordIndex = wordIndex;
+        this.vocabularyTree = vocabularyTree;
+    }
+
+    /**
+     * Bản sao độc lập của cả từ điển (entry và mọi index, giữ đúng hình dạng cây), dùng cho luồng ghi .dat.
+     * <p>
+     * Chỉ giữ khóa trong lúc chép cấu trúc (100k slang: vài chục ms, không tính lại Levenshtein hay tách từ nào),
+     * rồi luồng ghi serialize bản sao ở ngoài khóa. Trước đây luồng ghi serialize thẳng object này trong khóa
+     * (100k: ~1–3 s): mọi lần tìm và add/edit/delete rơi vào lúc đó phải đứng chờ.
+     */
+    public synchronized SlangDictionary snapshot() {
+        SlangDictionary copy = new SlangDictionary(nameTrie.copy(), nameTree.copy(), wordIndex.copy(),
+                vocabularyTree.copy());
+        copy.entries.putAll(entries); // SlangEntry bất biến nên dùng chung được
+        copy.idList.addAll(idList);
+        copy.positionOf.putAll(positionOf);
+        for (Map.Entry<String, Set<Integer>> name : idsByName.entrySet()) {
+            copy.idsByName.put(name.getKey(), new HashSet<>(name.getValue()));
+        }
+        copy.nextId = nextId;
+        return copy;
     }
 
     /**
@@ -80,12 +112,39 @@ public class SlangDictionary implements Serializable {
      */
     public static SlangDictionary build(List<SlangEntry> source) {
         SlangDictionary dictionary = new SlangDictionary();
+        // Ba nhóm index không dùng chung field nào nên được dựng song song (100k slang: ~1,1 s tuần tự → ~0,5 s):
+        //   luồng gọi:  entries, idList, positionOf, idsByName, nameTrie
+        //   luồng 2:    BK-tree tên (phần tốn nhất: mỗi tên một chuỗi phép Levenshtein)
+        //   luồng 3:    wordIndex + BK-tree từ vựng (tách từ mọi definition)
+        // Mỗi luồng chèn đúng thứ tự như khi dựng tuần tự, nên kết quả giống hệt. join() ở cuối đảm bảo luồng gọi
+        // thấy mọi thứ các luồng kia đã ghi (happens-before).
+        Set<String> names = new LinkedHashSet<>();
         for (SlangEntry entry : source) {
-            if (dictionary.entries.containsKey(entry.getId())) {
-                throw new IllegalArgumentException("Duplicate id " + entry.getId());
+            names.add(Tokenizer.normalizeName(entry.getSlang()));
+        }
+        CompletableFuture<Void> nameTreeTask = CompletableFuture.runAsync(() -> names.forEach(dictionary.nameTree::add));
+        CompletableFuture<Void> wordTask = CompletableFuture.runAsync(() -> source.forEach(dictionary::indexWords));
+        try {
+            for (SlangEntry entry : source) {
+                if (dictionary.entries.containsKey(entry.getId())) {
+                    throw new IllegalArgumentException("Duplicate id " + entry.getId());
+                }
+                dictionary.register(entry);
+                dictionary.indexName(entry, false);
+                dictionary.nextId = Math.max(dictionary.nextId, entry.getId() + 1);
             }
-            dictionary.insert(entry);
-            dictionary.nextId = Math.max(dictionary.nextId, entry.getId() + 1);
+        } finally {
+            try {
+                CompletableFuture.allOf(nameTreeTask, wordTask).join();
+            } catch (CompletionException e) {
+                if (e.getCause() instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                if (e.getCause() instanceof Error error) {
+                    throw error;
+                }
+                throw e;
+            }
         }
         return dictionary;
     }
@@ -219,23 +278,48 @@ public class SlangDictionary implements Serializable {
     }
 
     private void insert(SlangEntry entry) {
+        register(entry);
+        index(entry);
+    }
+
+    /** Thêm vào entries, idList, positionOf (chưa gắn index). */
+    private void register(SlangEntry entry) {
         entries.put(entry.getId(), entry);
         positionOf.put(entry.getId(), idList.size());
         idList.add(entry.getId());
-        index(entry);
     }
 
     /** Gắn entry vào mọi index theo tên và theo từ. */
     private void index(SlangEntry entry) {
+        indexName(entry, true);
+        indexWords(entry);
+    }
+
+    /** @param withNameTree false khi {@link #build} đã dựng BK-tree tên trên luồng khác */
+    private void indexName(SlangEntry entry, boolean withNameTree) {
         int id = entry.getId();
         String name = Tokenizer.normalizeName(entry.getSlang());
-        idsByName.computeIfAbsent(name, k -> new HashSet<>()).add(id);
+        Set<Integer> sameName = idsByName.get(name);
+        if (sameName == null) {
+            sameName = new HashSet<>();
+            idsByName.put(name, sameName);
+            if (withNameTree) {
+                nameTree.add(name); // tên mới (tên từng bị xoá mềm thì được khôi phục)
+            }
+        }
+        sameName.add(id);
         nameTrie.put(name, id);
-        nameTree.add(name); // tên đã có thì bỏ qua; tên từng bị xoá mềm thì được khôi phục
+    }
 
+    private void indexWords(SlangEntry entry) {
+        int id = entry.getId();
         for (String word : wordsOf(entry)) {
+            // Chỉ đưa vào BK-tree khi từ lần đầu xuất hiện: từ đã có thì add chỉ đi một vòng Levenshtein vô ích.
+            // 100k slang có hàng trăm nghìn lần xuất hiện nhưng chỉ vài nghìn từ khác nhau (~0,5 s → ~10 ms).
+            if (!wordIndex.containsKey(word)) {
+                vocabularyTree.add(word);
+            }
             wordIndex.add(word, id);
-            vocabularyTree.add(word);
         }
     }
 

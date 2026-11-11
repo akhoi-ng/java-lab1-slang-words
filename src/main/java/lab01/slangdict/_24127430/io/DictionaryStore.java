@@ -53,10 +53,11 @@ import lab01.slangdict._24127430.core.SlangDictionary;
  * chỉ hỏng file .tmp, file .dat cũ vẫn nguyên.
  * <p>
  * <b>Ghi nền:</b> {@link #saveInBackground} trả về ngay; một luồng nền duy nhất vừa serialize vừa ghi đĩa.
- * Serialize 100.000 slang tốn khoảng 2 giây nên không được làm trên EDT (UI sẽ đứng). Bản ghi vẫn nhất quán
- * vì SlangDictionary serialize trong khoá {@code synchronized}, cùng khoá với add/replace/remove.
+ * Serialize 100.000 slang tốn khoảng 1 giây nên không được làm trên EDT (UI sẽ đứng). Luồng ghi chỉ giữ khoá của
+ * từ điển trong lúc chép nó ({@link SlangDictionary#snapshot()}, 100k: vài chục đến ~200 ms) rồi serialize bản chép
+ * ở ngoài khoá, nên bản ghi nhất quán mà lần tìm hay add/edit/delete trong lúc ghi không phải chờ.
  * Nhiều lần lưu dồn dập thì chỉ ghi một lần, với trạng thái mới nhất. App dùng bản có hoãn
- * ({@link #DEFAULT_SAVE_DELAY_MS}) để việc giữ khoá khi serialize không rơi đúng lúc tìm lại sau khi sửa.
+ * ({@link #DEFAULT_SAVE_DELAY_MS}) để gộp các lần sửa liên tiếp thành một lần ghi.
  */
 public class DictionaryStore implements AutoCloseable {
 
@@ -120,9 +121,9 @@ public class DictionaryStore implements AutoCloseable {
     private static final int MAX_BACKUPS = 1000;
 
     /**
-     * App chờ chừng này sau lần sửa cuối rồi mới ghi nền. Lúc serialize, luồng ghi giữ khóa của từ điển (100k slang:
-     * khoảng 2 s); nếu ghi ngay thì lần tìm lại ngay sau khi thêm/sửa/xóa phải đứng chờ khóa. Hoãn lại thì lần tìm đó
-     * xong trước, việc ghi rơi vào lúc người dùng đang đọc kết quả. Thoát app vẫn ghi ngay ({@link #flush}).
+     * App chờ chừng này sau lần sửa cuối rồi mới ghi nền: sửa liên tục chỉ tốn một lần chép + serialize, và lần tìm
+     * lại ngay sau khi sửa không phải chờ cả lúc chép từ điển (vài chục ms dưới khóa). Thoát app vẫn ghi ngay
+     * ({@link #flush}).
      */
     public static final long DEFAULT_SAVE_DELAY_MS = 1500;
 
@@ -451,7 +452,9 @@ public class DictionaryStore implements AutoCloseable {
             return; // flush() đã ghi rồi
         }
         try {
-            writeAtomically(serialize(dictionary), dictionaryFile);
+            // Chỉ giữ khóa từ điển trong lúc chép (100k: vài chục ms); phần serialize chậm (~1 s) chạy trên bản chép,
+            // nên lần tìm hay add/edit/delete rơi vào lúc đang ghi không phải chờ (lỗi M1 trong AUDIT_REPORT.md)
+            writeAtomically(serialize(dictionary.snapshot()), dictionaryFile);
         } catch (IOException e) {
             errorListener.accept(e);
         } catch (RuntimeException | Error e) {

@@ -93,7 +93,7 @@ public class SearchService {
         // (cùng khóa với add/replace/remove) để không đọc index đang sửa dở
         synchronized (dictionary) {
             // Đo từ lúc đã có khóa: thời gian hiện trên màn hình là thời gian TÌM, không tính lúc chờ luồng ghi .dat
-            // (đang serialize) nhả khóa
+            // chép xong từ điển (SlangDictionary.snapshot, 100k: tối đa ~200 ms; phần serialize chạy ngoài khóa)
             start = System.nanoTime();
             Map<Integer, Integer> scoreById = target == SearchTarget.SLANG
                     ? searchNames(dictionary, mode, query == null ? "" : query)

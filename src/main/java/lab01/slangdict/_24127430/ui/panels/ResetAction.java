@@ -23,7 +23,7 @@ import lab01.slangdict._24127430.ui.dialogs.ResetDialog;
  * EDT:        ResetDialog (xác nhận + "xóa cả lịch sử") ── Hủy ──► thôi
  *               │ Khôi phục
  *             khóa cửa sổ (con trỏ chờ, "Đang khôi phục…" nếu lâu hơn 0,3 s)
- * luồng nền:  DictionaryService.loadOriginal()   ← đọc + index slang.txt gốc (7,6k: ~0,1 s; 100k: ~1,5 s)
+ * luồng nền:  DictionaryService.loadOriginal()   ← đọc + index slang.txt gốc (7,6k: ~0,1 s; 100k: ~0,5–0,7 s)
  * EDT:        replaceDictionary(mới)  → lưu .dat nền, listener: thanh trạng thái, màn hình Slang hôm nay
  *             (nếu chọn) history.clear() → màn hình Lịch sử tự trống
  *             SearchPanel.showReload: tìm lại trên dữ liệu mới

@@ -290,6 +290,44 @@ class SlangDictionaryTest {
         SlangEntry added = restored.add("new one", List.of("brand new"));
         assertEquals(d.nextId(), added.getId());
         assertEquals(Set.of(added.getId()), restored.idsWithWord("brand"));
+
+        // snapshot (luồng ghi .dat dùng): cùng nội dung, kể cả BK-tree có nút xoá mềm và bộ đếm id
+        SlangDictionary snapshot = d.snapshot();
+        assertSameIndexes(rebuilt, snapshot, probeNames, probeWords);
+        assertEquals(d.nextId(), snapshot.nextId());
+        assertSameIndexes(rebuilt, roundTrip(snapshot), probeNames, probeWords);
+
+        // ...và độc lập: sửa bản này không ảnh hưởng bản kia
+        snapshot.add("lol", List.of("keyboard brand"));
+        for (SlangEntry e : new ArrayList<>(snapshot.all()).subList(0, 10)) {
+            snapshot.remove(e.getId());
+        }
+        snapshot.replace(snapshot.randomEntry(random).withMeanings(List.of("zzz")));
+        assertSameIndexes(rebuilt, d, probeNames, probeWords);
+        d.add("ggwp", List.of("only in the original"));
+        assertTrue(snapshot.idsWithWord("original").isEmpty());
+    }
+
+    @Test
+    void parallelBuildMatchesOneByOneAdds() throws Exception {
+        // build() dựng ba nhóm index song song; kết quả phải giống hệt thêm tuần tự từng entry
+        List<SlangEntry> source = new ArrayList<>();
+        SlangDictionary sequential = new SlangDictionary();
+        for (SlangEntry e : SlangDictionaryTest.original().all()) {
+            SlangEntry added = sequential.add(e.getSlang(), e.getMeanings());
+            source.add(added);
+        }
+        SlangDictionary built = SlangDictionary.build(source);
+        Set<String> probeNames = new HashSet<>(List.of("lol", "lmao", "brb", "afk", "zzz", "ily"));
+        Set<String> probeWords = new HashSet<>(List.of("laugh", "love", "money", "zzz", "keyboard"));
+        assertSameIndexes(sequential, built, probeNames, probeWords);
+        assertEquals(sequential.nextId(), built.nextId());
+    }
+
+    @Test
+    void buildRejectsDuplicateIds() {
+        List<SlangEntry> source = List.of(new SlangEntry(0, "a", List.of("x")), new SlangEntry(0, "b", List.of("y")));
+        assertThrows(IllegalArgumentException.class, () -> SlangDictionary.build(source));
     }
 
     @Test

@@ -152,6 +152,37 @@ public class Trie<V> implements Serializable {
         return keyCount;
     }
 
+    /**
+     * Bản sao độc lập (giữ đúng thứ tự value trong từng key), dùng chung các value (nên bất biến, ví dụ Integer).
+     * O(số nút), duyệt bằng ngăn xếp nên key dài bao nhiêu cũng không tràn stack.
+     */
+    public Trie<V> copy() {
+        Trie<V> copy = new Trie<>();
+        copy.keyCount = keyCount;
+        Deque<Node<V>> sources = new ArrayDeque<>();
+        Deque<Node<V>> copies = new ArrayDeque<>();
+        sources.push(root);
+        copies.push(copy.root);
+        while (!sources.isEmpty()) {
+            Node<V> source = sources.pop();
+            Node<V> target = copies.pop();
+            if (source.values != null) {
+                target.values = new LinkedHashSet<>(source.values);
+            }
+            if (source.children != null) {
+                TreeMap<Character, Node<V>> children = new TreeMap<>();
+                for (Map.Entry<Character, Node<V>> child : source.children.entrySet()) {
+                    Node<V> childCopy = new Node<>();
+                    children.put(child.getKey(), childCopy);
+                    sources.push(child.getValue());
+                    copies.push(childCopy);
+                }
+                target.children = children;
+            }
+        }
+        return copy;
+    }
+
     // ===================== Serialize =====================
 
     /*
