@@ -329,7 +329,9 @@ public class DictionaryService {
      * trên object cũ vẫn xong bình thường (object cũ không bị sửa), giao diện tìm lại sau đó.
      */
     public void replaceDictionary(SlangDictionary fresh) {
-        dictionary = Objects.requireNonNull(fresh, "fresh");
+        Objects.requireNonNull(fresh, "fresh");
+        fresh.reserveIdsBelow(dictionary.nextId()); // id đã cấp cho slang thêm vào trước đó không được cấp lại
+        dictionary = fresh;
         store.saveInBackground(fresh); // lần lưu đang chờ của từ điển cũ (nếu có) bị thay bằng bản này
         listeners.forEach(Runnable::run);
     }

@@ -402,6 +402,19 @@ class DictionaryServiceTest {
     }
 
     @Test
+    void idsOfAddedSlangsAreNeverHandedOutAgainAfterReset() throws Exception {
+        service.reset();
+        int added = service.add("yeet", List.of("To throw"), mustNotAsk).entry().getId();
+        assertEquals(ORIGINAL_SIZE, added, "first id after the original ones");
+
+        service.reset();
+        int next = service.add("zzqx", List.of("Made up"), mustNotAsk).entry().getId();
+
+        assertTrue(next > added, "id " + added + " belonged to a slang removed by reset, got " + next);
+        assertEquals(next + 1, reloadFromDisk().nextId(), "kept after reopening the app");
+    }
+
+    @Test
     void resetReplacesTheDictionaryObject() throws Exception {
         SlangDictionary before = service.current();
         service.reset();

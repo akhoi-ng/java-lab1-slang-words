@@ -1,10 +1,14 @@
 package lab01.slangdict._24127430;
 
+import java.awt.HeadlessException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
 import javax.swing.JOptionPane;
@@ -12,8 +16,10 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 
 import lab01.slangdict._24127430.i18n.Messages;
+import lab01.slangdict._24127430.io.AppPaths;
 import lab01.slangdict._24127430.io.DictionaryStore;
 import lab01.slangdict._24127430.io.HistoryStore;
+import lab01.slangdict._24127430.io.InstanceLock;
 import lab01.slangdict._24127430.io.SettingsStore;
 import lab01.slangdict._24127430.model.QuizType;
 import lab01.slangdict._24127430.model.SearchMode;
@@ -54,6 +60,9 @@ public final class App {
     private static MainFrame mainFrame;
     /** Lỗi ghi file xảy ra trước khi MainFrame kịp hiện (ví dụ lúc lưu .dat lần đầu). */
     private static final List<Runnable> pendingSaveErrors = new ArrayList<>();
+    /** Giữ khóa data/ suốt lúc app chạy (field static để không bị thu gom rác làm nhả khóa); OS tự nhả khi thoát. */
+    @SuppressWarnings("unused")
+    private static InstanceLock instanceLock;
 
     private App() {
     }
@@ -67,6 +76,9 @@ public final class App {
         HistoryService history;
         try {
             settings = SettingsStore.createDefault();
+            if (!acquireInstanceLock(settings)) {
+                return;
+            }
             store = DictionaryStore.createDefault();
             historyStore = HistoryStore.createDefault();
             history = new HistoryService(historyStore); // file nhỏ, đọc ngay trên luồng main
@@ -121,6 +133,7 @@ public final class App {
                         () -> exit(store, historyStore));
                 installScreens(mainFrame, new DictionaryService(loaded.dictionary(), store), history);
                 mainFrame.setVisible(true);
+                reportDataDirFallback();
                 if (loaded.recovery() != null) {
                     reportRecovery(loaded.recovery());
                 }
@@ -167,6 +180,55 @@ public final class App {
         dictionary.addChangeListener(definitionQuiz::dictionaryChanged);
         frame.setScreen(Feature.Card.QUIZ_SLANG, slangQuiz);
         frame.setScreen(Feature.Card.QUIZ_DEFINITION, definitionQuiz);
+    }
+
+    /**
+     * Chạy trên luồng main, trước khi đọc/ghi dữ liệu. Khóa data/ để hai cửa sổ không ghi đè dữ liệu của nhau; đã có
+     * cửa sổ khác giữ khóa thì báo rồi thoát.
+     *
+     * @return true nếu được chạy tiếp
+     */
+    private static boolean acquireInstanceLock(SettingsStore settings) {
+        Path dataDir = AppPaths.dataDir();
+        try {
+            Optional<InstanceLock> lock = InstanceLock.tryAcquire(dataDir);
+            if (lock.isPresent()) {
+                instanceLock = lock.get();
+                return true;
+            }
+        } catch (IOException e) {
+            // Không mở được file khóa (hiếm, vì data/ đã được thử ghi): vẫn cho chạy, chỉ mất phần bảo vệ này
+            System.err.println("[App] cannot lock the data folder, running without the single-instance check: " + e);
+            return true;
+        }
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                Messages.setLocale(Messages.resolve(settings.language(Messages.DEFAULT_LOCALE)));
+                ThemeManager.install(settings.theme());
+                JOptionPane.showMessageDialog(null, Messages.format("error.alreadyRunning", dataDir.toString()),
+                        Messages.get("app.title"), JOptionPane.WARNING_MESSAGE);
+            });
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (InvocationTargetException | HeadlessException e) {
+            System.err.println("[App] another instance is already using " + dataDir);
+        }
+        System.exit(0);
+        return false;
+    }
+
+    /**
+     * Chạy trên EDT. Thư mục cạnh jar không ghi được nên dữ liệu nằm trong thư mục home: báo một lần, ở lần chạy tạo
+     * ra thư mục đó (sau đó đường dẫn vẫn xem được ở Giới thiệu và tooltip thanh trạng thái).
+     */
+    private static void reportDataDirFallback() {
+        AppPaths.Location location = AppPaths.location();
+        if (location.isFallback() && location.newlyCreated()) {
+            JOptionPane.showMessageDialog(mainFrame,
+                    Messages.format("notice.dataDirFallback", location.unwritable().toString(),
+                            location.dir().toString()),
+                    Messages.get("notice.dataDirFallback.title"), JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     /**

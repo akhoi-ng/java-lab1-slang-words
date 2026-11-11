@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong bước 1–11, bước 12 xong code nhưng chưa commit** → commit bước 12 rồi làm bước 13 |
-| Test | 232/232 pass (`.\mvnw.cmd test`) |
-| Commit đã có | 16 commit trên 6 ngày: 04/11, 05/11, 08/11, 09/11, 10/11, 11/11 → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày) |
+| Bước đang ở | **Xong và đã commit bước 1–12**; đã sửa mọi lỗi trong `AUDIT_REPORT.md` (C1, C2, H1, M1–M3, L1–L5) → làm bước 13 |
+| Test | 262/262 pass (`.\mvnw.cmd test`) |
+| Commit đã có | 26 commit trên 6 ngày (tính tới commit sửa L1, L2, L5): 04/11 (1), 05/11 (1), 08/11 (1), 09/11 (3), 10/11 (6), 11/11 (14) → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày). Đếm lại bằng `git rev-list --count HEAD` |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -121,6 +121,8 @@ Các method:
   - nếu đang chạy từ jar: thư mục chứa jar + `/data`
   - nếu đang chạy trong IDE (`target/classes`): thư mục làm việc + `/data`
   - tự tạo thư mục nếu chưa có
+  - **Sửa L1** (11/11/2026): thư mục cạnh jar/thư mục làm việc không tạo hoặc không ghi được (ghi thử một file tạm) thì dùng `<home>/.slang-dictionary` và báo người dùng một lần, thay vì báo lỗi rồi thoát. Thư mục chỉ định bằng system property thì không tự đổi
+- **Sửa L2** (11/11/2026): `InstanceLock` khóa `data/app.lock` (`FileChannel.tryLock`) lúc khởi động; cửa sổ thứ hai dùng cùng data/ thì báo "đang mở ở cửa sổ khác" rồi thoát, để hai process không ghi đè dữ liệu của nhau
 - `AppPaths.dictionaryFile()`, `historyFile()`, `settingsFile()`, `externalOriginalFile()` (= `data/slang.txt`)
 - `DictionaryStore`:
   - `save(SlangDictionary, Path)`: ghi header gồm magic number + số phiên bản định dạng **+ CRC32 của payload** (thêm khi làm), sau đó `ObjectOutputStream`, ghi vào `*.tmp` rồi `Files.move(ATOMIC_MOVE, REPLACE_EXISTING)` (thử lại vài lần nếu Windows báo AccessDenied)
@@ -224,7 +226,7 @@ Các method:
 - Bổ sung so với đặc tả:
   - **Tìm trên luồng nền** (một luồng "search" riêng), nên query nặng ở bản 100k (~0,2 s) không làm đứng giao diện. Kết quả cũ về muộn thì bị bỏ nhờ số thứ tự `AtomicLong`. Lâu hơn 120 ms thì hiện "Đang tìm…".
   - Vì tìm chạy trên luồng khác EDT, `SearchService` đọc index trong `synchronized (dictionary)`, cùng khóa với add/replace/remove. **Bước 10 không cần làm gì thêm**: cứ sửa từ điển trên EDT như bình thường.
-  - Bảng hiện tối đa **1.000 dòng**; dòng trạng thái vẫn ghi đủ tổng số ("Hiện 1.000 / 88.464 kết quả đầu tiên · 230 ms").
+  - Bảng hiện tối đa **1.000 dòng**; dòng trạng thái vẫn ghi đủ tổng số ("Hiện 1.000 / 88.464 kết quả đầu tiên · 230 ms"). **Sửa L5** (11/11/2026): thêm nút "Hiện tất cả" tìm lại đúng lần tìm đó không giới hạn số dòng, vì đề yêu cầu hiện tất cả.
   - Đổi tab Slang ↔ Định nghĩa ngay trên màn hình thì Sidebar và tiêu đề cửa sổ đổi theo F1 ↔ F2.
   - Mỗi target nhớ mode riêng: slang mặc định **Tiền tố**, definition mặc định **Chứa chuỗi** (đổi từ Chính xác khi sửa lỗi L4 của audit). Có dòng giải thích ngắn cho mode đang chọn.
   - Gợi ý "Có phải bạn muốn tìm" dùng cho cả 2 target và mọi mode trừ Gần đúng: slang gợi ý tối đa 5 tên, definition gợi ý 1 câu đã sửa lỗi gõ (`laugh out lound` → `laugh out loud`). Bấm gợi ý là tìm luôn. Logic nằm ở `SearchService.suggestions`.

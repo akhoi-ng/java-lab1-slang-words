@@ -1,8 +1,11 @@
 package lab01.slangdict._24127430.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -31,6 +34,55 @@ class AppPathsTest {
         Path work = dir.resolve("work");
         assertEquals(work.resolve("data"), AppPaths.resolveDataDir(null, classes, work));
         assertEquals(work.resolve("data"), AppPaths.resolveDataDir(null, null, work));
+    }
+
+    @Test
+    void writableFolderNextToJarIsUsed(@TempDir Path dir) throws Exception {
+        Path jar = Files.createFile(Files.createDirectories(dir.resolve("dist")).resolve("app.jar"));
+        AppPaths.Location location = AppPaths.chooseLocation(null, jar, dir.resolve("work"), dir.resolve("home"));
+        assertEquals(dir.resolve("dist").resolve("data"), location.dir());
+        assertFalse(location.isFallback());
+        assertTrue(Files.isDirectory(location.dir()));
+        assertFalse(Files.exists(dir.resolve("home")));
+        try (var files = Files.list(location.dir())) {
+            assertEquals(0, files.count(), "the write test leaves nothing behind");
+        }
+    }
+
+    @Test
+    void unwritableFolderNextToJarFallsBackToHome(@TempDir Path dir) throws Exception {
+        Path dist = Files.createDirectories(dir.resolve("dist"));
+        Path jar = Files.createFile(dist.resolve("app.jar"));
+        Files.createFile(dist.resolve("data")); // một file chiếm tên data/ → không tạo được thư mục (như ổ chỉ đọc)
+        Path home = dir.resolve("home");
+
+        AppPaths.Location first = AppPaths.chooseLocation(null, jar, dir.resolve("work"), home);
+        assertEquals(home.resolve(AppPaths.FALLBACK_DIR_NAME), first.dir());
+        assertEquals(dist.resolve("data"), first.unwritable());
+        assertTrue(first.isFallback());
+        assertTrue(first.newlyCreated());
+        assertTrue(Files.isDirectory(first.dir()));
+
+        AppPaths.Location second = AppPaths.chooseLocation(null, jar, dir.resolve("work"), home);
+        assertEquals(first.dir(), second.dir());
+        assertFalse(second.newlyCreated(), "the notice is shown only on the run that created the folder");
+    }
+
+    @Test
+    void unusableFolderChosenByTheUserIsReportedNotReplaced(@TempDir Path dir) throws Exception {
+        Path blocked = Files.createFile(dir.resolve("blocked"));
+        assertThrows(UncheckedIOException.class,
+                () -> AppPaths.chooseLocation(blocked.toString(), null, dir.resolve("work"), dir.resolve("home")));
+        assertFalse(Files.exists(dir.resolve("home")));
+    }
+
+    @Test
+    void bothFoldersUnusableFails(@TempDir Path dir) throws Exception {
+        Path work = Files.createDirectories(dir.resolve("work"));
+        Files.createFile(work.resolve("data"));
+        Path home = Files.createDirectories(dir.resolve("home"));
+        Files.createFile(home.resolve(AppPaths.FALLBACK_DIR_NAME));
+        assertThrows(UncheckedIOException.class, () -> AppPaths.chooseLocation(null, null, work, home));
     }
 
     @Test

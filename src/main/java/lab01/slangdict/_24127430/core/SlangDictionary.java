@@ -170,6 +170,15 @@ public class SlangDictionary implements Serializable {
         return nextId;
     }
 
+    /**
+     * Không cấp id nhỏ hơn {@code floor} nữa. Reset (F7) gọi với {@link #nextId} của từ điển cũ: từ điển gốc chỉ có
+     * id từ file (0..n-1), nếu không có bước này thì id của các slang người dùng đã thêm trước đó sẽ được cấp lại cho
+     * slang mới, và một dòng kết quả cũ còn trên màn hình có thể trỏ nhầm sang slang khác.
+     */
+    public synchronized void reserveIdsBelow(int floor) {
+        nextId = Math.max(nextId, floor);
+    }
+
     // ----- theo tên slang -----
 
     /** Id các entry có đúng tên này, không phân biệt hoa thường (chỉ đọc, rỗng nếu không có). */

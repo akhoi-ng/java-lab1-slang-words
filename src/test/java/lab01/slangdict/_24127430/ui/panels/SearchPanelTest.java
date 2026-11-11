@@ -134,6 +134,42 @@ class SearchPanelTest {
     }
 
     @Test
+    void showAllLiftsTheRowLimitForTheShownSearchOnly() throws Exception {
+        int total = SearchPanel.RESULT_LIMIT + 5;
+        List<SlangEntry> many = new ArrayList<>();
+        for (int i = 0; i < total; i++) {
+            many.add(new SlangEntry(i, "a" + i, List.of("meaning " + i)));
+        }
+        SlangDictionary big = SlangDictionary.build(many);
+        onEdt(() -> {
+            panel = new SearchPanel(new SearchService(() -> big), navigated::add, Runnable::run);
+            panel.setSearchListener(history::add);
+        });
+
+        typeAndPressEnter("a");
+        assertEquals(SearchPanel.RESULT_LIMIT, panel.table().getRowCount());
+        assertTrue(panel.showAllButton().isVisible());
+
+        onEdt(() -> panel.selectRow(3));
+        String selected = (String) panel.table().getValueAt(3, 0);
+        onEdt(panel.showAllButton()::doClick);
+        flushEdt();
+        assertEquals(total, panel.table().getRowCount());
+        assertFalse(panel.showAllButton().isVisible());
+        assertEquals(selected, panel.table().getValueAt(panel.table().getSelectedRow(), 0), "giữ dòng đang chọn");
+        assertEquals(1, history.size(), "cùng một lần tìm, không ghi lịch sử lần nữa");
+
+        onEdt(panel::refresh); // sau thêm/sửa/xóa: vẫn hiện hết
+        flushEdt();
+        assertEquals(total, panel.table().getRowCount());
+
+        typeAndPressEnter("a1");
+        typeAndPressEnter("a"); // lần tìm mới lại bắt đầu từ RESULT_LIMIT
+        assertEquals(SearchPanel.RESULT_LIMIT, panel.table().getRowCount());
+        assertTrue(panel.showAllButton().isVisible());
+    }
+
+    @Test
     void clearingTheQueryClearsTheResults() throws Exception {
         typeAndPressEnter("lol");
         onEdt(() -> panel.queryField().setText(""));

@@ -107,7 +107,10 @@ import lab01.slangdict._24127430.ui.ThemeManager;
  */
 public class SearchPanel extends JPanel implements FeatureScreen {
 
-    /** Số dòng tối đa đưa lên bảng; tổng số kết quả vẫn hiện đầy đủ trên dòng trạng thái. */
+    /**
+     * Số dòng tối đa đưa lên bảng ở lần tìm đầu; tổng số kết quả vẫn hiện trên dòng trạng thái, kèm nút
+     * "Hiện tất cả" để lấy hết (JTable chỉ vẽ các dòng đang thấy, nên 100k dòng vẫn cuộn mượt).
+     */
     static final int RESULT_LIMIT = 1000;
     /** Số gợi ý "Có phải bạn muốn tìm" tối đa. */
     static final int SUGGESTION_LIMIT = 5;
@@ -155,6 +158,8 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     // ----- dòng trạng thái + gợi ý + nút thao tác -----
     private final JLabel statusLabel = new JLabel();
+    /** Chỉ hiện khi kết quả bị cắt ở {@link #RESULT_LIMIT}: tìm lại đúng yêu cầu đó, lấy hết kết quả. */
+    private final JButton showAllButton = new JButton();
     private final JLabel noticeLabel = new JLabel();
     private final JLabel suggestLabel = new JLabel();
     private final JPanel suggestionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
@@ -185,6 +190,8 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     /** Yêu cầu của kết quả đang hiện (null nếu bảng đang trống vì chưa tìm). */
     private Request shownRequest;
     private SearchOutcome shownOutcome;
+    /** Yêu cầu mà người dùng đã bấm "Hiện tất cả": tìm lại nó (sau thêm/sửa/xóa) vẫn lấy hết kết quả. */
+    private Request expandedRequest;
     private List<String> shownSuggestions = List.of();
     private String errorMessage;
     private Status status = Status.IDLE;
@@ -446,10 +453,16 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             }
         };
         left.add(statusLabel);
+        left.add(showAllButton);
         left.add(noticeLabel);
         left.add(suggestionPanel);
         noticeLabel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 0));
         suggestionPanel.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 0));
+        showAllButton.putClientProperty("JButton.buttonType", "borderless");
+        showAllButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        showAllButton.setMargin(new Insets(0, 8, 0, 4));
+        showAllButton.setVisible(false);
+        showAllButton.addActionListener(e -> showAllResults());
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         configureActionButton(addButton, Feature.ADD);
@@ -656,6 +669,10 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             return;
         }
         long ticket = generation.incrementAndGet();
+        if (!request.equals(expandedRequest)) {
+            expandedRequest = null; // lần tìm khác: lại bắt đầu từ RESULT_LIMIT dòng
+        }
+        int limit = expandedRequest != null ? SearchService.UNLIMITED : RESULT_LIMIT;
         busyTimer.restart();
         executor.execute(() -> {
             if (generation.get() != ticket) {
@@ -665,7 +682,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             List<String> suggestions = List.of();
             RuntimeException error = null;
             try {
-                outcome = service.search(request.target(), request.mode(), request.query(), RESULT_LIMIT);
+                outcome = service.search(request.target(), request.mode(), request.query(), limit);
                 if (outcome.isEmpty() && request.mode() != SearchMode.FUZZY) {
                     suggestions = service.suggestions(request.target(), request.query(), SUGGESTION_LIMIT);
                 }
@@ -737,10 +754,25 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         return -1;
     }
 
+    /**
+     * Nút "Hiện tất cả": tìm lại đúng yêu cầu đang hiện, không giới hạn số dòng, giữ dòng đang chọn. Không ghi lịch
+     * sử thêm lần nữa (cùng một lần tìm). Lần tìm khác (gõ chữ khác, đổi mode) lại bắt đầu từ {@link #RESULT_LIMIT}.
+     */
+    private void showAllResults() {
+        if (shownRequest == null) {
+            return;
+        }
+        expandedRequest = shownRequest;
+        SlangEntry selected = selectedEntry().orElse(null);
+        runSearch(shownRequest, new Selection(selected == null ? -1 : selected.getId(),
+                Math.max(0, table.getSelectedRow()), null));
+    }
+
     private void clearResults() {
         generation.incrementAndGet(); // bỏ mọi kết quả đang chờ
         busyTimer.stop();
         cancelPendingHistory();
+        expandedRequest = null;
         shownRequest = null;
         shownOutcome = null;
         shownSuggestions = List.of();
@@ -803,6 +835,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     private void renderStatus() {
         Color muted = ThemeManager.color("Label.disabledForeground", Color.GRAY);
+        showAllButton.setVisible(status == Status.DONE && shownOutcome.isTruncated());
         switch (status) {
             case IDLE -> {
                 statusLabel.setText(Messages.get("search.status.idle"));
@@ -983,6 +1016,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         modeLabel.setText(Messages.get("search.mode.label"));
         modeCombo.repaint();
         searchButton.setText(Messages.get("search.button"));
+        showAllButton.setText(Messages.get("search.showAll"));
         addButton.setText(Messages.get("search.action.add"));
         editButton.setText(Messages.get("search.action.edit"));
         deleteButton.setText(Messages.get("search.action.delete"));
@@ -1032,6 +1066,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         slangTab.setFont(tabFont);
         definitionTab.setFont(tabFont);
         table.setRowHeight(Math.round(font.getSize2D() * 2f));
+        showAllButton.setForeground(ThemeManager.accentColor());
     }
 
     // ===================== Cho test =====================
@@ -1050,6 +1085,10 @@ public class SearchPanel extends JPanel implements FeatureScreen {
 
     JTable table() {
         return table;
+    }
+
+    JButton showAllButton() {
+        return showAllButton;
     }
 
     SearchTarget target() {
