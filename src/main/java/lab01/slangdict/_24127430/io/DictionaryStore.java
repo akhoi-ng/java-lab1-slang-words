@@ -19,7 +19,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -88,16 +90,34 @@ public class DictionaryStore implements AutoCloseable {
     public enum Source {
         /** Đọc từ dictionary.dat đã index sẵn. */
         DAT,
-        /** Build từ slang.txt (lần đầu chạy hoặc .dat hỏng). */
+        /** Build từ slang.txt (lần đầu chạy, hoặc .dat hỏng: xem {@link LoadResult#recovery()}). */
         TEXT
     }
 
-    /** Kết quả load khi khởi động. */
-    public record LoadResult(SlangDictionary dictionary, Source source, long elapsedNanos) {
+    /**
+     * Kết quả load khi khởi động.
+     *
+     * @param recovery khác null khi dictionary.dat có nhưng hỏng: file cũ đã được đổi tên để giữ lại và từ điển
+     *                 được build lại từ slang.txt. UI phải báo cho người dùng (các thay đổi trước đó không còn).
+     */
+    public record LoadResult(SlangDictionary dictionary, Source source, long elapsedNanos, Recovery recovery) {
         public long elapsedMillis() {
             return TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
         }
     }
+
+    /**
+     * dictionary.dat không đọc được nên đã bị build lại.
+     *
+     * @param backupFile file .dat cũ, đã đổi tên (ví dụ dictionary.dat.bad) chứ không bị ghi đè
+     * @param cause      lý do không đọc được
+     */
+    public record Recovery(Path backupFile, DictionaryFormatException cause) {
+    }
+
+    /** Hậu tố của file .dat hỏng được giữ lại: dictionary.dat.bad, dictionary.dat.bad2, ... */
+    static final String BACKUP_SUFFIX = ".bad";
+    private static final int MAX_BACKUPS = 1000;
 
     /**
      * App chờ chừng này sau lần sửa cuối rồi mới ghi nền. Lúc serialize, luồng ghi giữ khóa của từ điển (100k slang:
@@ -319,20 +339,33 @@ public class DictionaryStore implements AutoCloseable {
     // ===================== Khởi động / Reset =====================
 
     /**
-     * Thử đọc dictionary.dat; không có hoặc hỏng thì build từ slang.txt gốc rồi lưu lại .dat.
+     * Thử đọc dictionary.dat; chưa có thì build từ slang.txt gốc rồi lưu lại .dat.
+     * <p>
+     * .dat có nhưng <b>hỏng</b> ({@link DictionaryFormatException}): file cũ được đổi tên thành
+     * dictionary.dat.bad (không ghi đè bản .bad có sẵn) rồi mới build lại, và kết quả mang {@link Recovery} để UI
+     * báo cho người dùng. Lỗi đọc <b>khác</b> (file đang bị process khác giữ, không có quyền...) thì ném lên luôn:
+     * file có thể vẫn tốt, build lại rồi ghi đè sẽ làm mất mọi thay đổi của người dùng.
+     * <p>
      * Lưu .dat thất bại (ví dụ thư mục chỉ đọc) không làm hỏng việc khởi động, chỉ báo qua error listener.
      *
      * @throws SlangFormatException slang.txt gốc sai định dạng (kèm số dòng)
-     * @throws IOException          không đọc được slang.txt gốc
+     * @throws IOException          không đọc được slang.txt gốc, không đọc được .dat vì lỗi I/O,
+     *                              hoặc không đổi tên được .dat hỏng để giữ lại
      */
     public LoadResult loadOrBuild() throws IOException, SlangFormatException {
         long start = System.nanoTime();
+        Recovery recovery = null;
         if (Files.exists(dictionaryFile)) {
             try {
                 SlangDictionary dictionary = load(dictionaryFile);
-                return new LoadResult(dictionary, Source.DAT, System.nanoTime() - start);
-            } catch (IOException e) {
-                System.err.println("[DictionaryStore] " + dictionaryFile + " unreadable, rebuilding from text: " + e);
+                return new LoadResult(dictionary, Source.DAT, System.nanoTime() - start, null);
+            } catch (DictionaryFormatException e) {
+                Path backup = backUpDamagedFile();
+                System.err.println("[DictionaryStore] " + dictionaryFile + " unreadable (" + e.getMessage()
+                        + "), kept as " + backup + ", rebuilding from text");
+                recovery = new Recovery(backup, e);
+            } catch (NoSuchFileException e) {
+                // bị xóa ngay sau khi kiểm tra tồn tại: như lần chạy đầu
             }
         }
         SlangDictionary dictionary = loadOriginal();
@@ -342,7 +375,32 @@ public class DictionaryStore implements AutoCloseable {
         } catch (IOException e) {
             errorListener.accept(e);
         }
-        return new LoadResult(dictionary, Source.TEXT, elapsed);
+        return new LoadResult(dictionary, Source.TEXT, elapsed, recovery);
+    }
+
+    /**
+     * Đổi tên dictionary.dat hỏng sang tên .bad chưa dùng. Không đổi tên được thì ném lỗi để app dừng lại
+     * thay vì ghi đè file (biết đâu người dùng còn cứu được dữ liệu trong đó).
+     */
+    private Path backUpDamagedFile() throws IOException {
+        String name = dictionaryFile.getFileName() + BACKUP_SUFFIX;
+        for (int i = 1; i <= MAX_BACKUPS; i++) {
+            Path backup = dictionaryFile.resolveSibling(i == 1 ? name : name + i);
+            if (Files.exists(backup)) {
+                continue; // bản .bad của lần hỏng trước: giữ nguyên
+            }
+            try {
+                Files.move(dictionaryFile, backup);
+                return backup;
+            } catch (FileAlreadyExistsException e) {
+                // vừa có ai tạo đúng tên này → thử tên kế tiếp
+            } catch (IOException e) {
+                throw new IOException("Dictionary file " + dictionaryFile + " is damaged and could not be backed up"
+                        + " (it was left untouched): " + e, e);
+            }
+        }
+        throw new IOException("Dictionary file " + dictionaryFile + " is damaged and too many backups ("
+                + MAX_BACKUPS + ") already exist; it was left untouched");
     }
 
     /** Build từ điển từ slang.txt gốc: data/slang.txt nếu có, không thì bản nhúng trong jar. Dùng cho Reset. */

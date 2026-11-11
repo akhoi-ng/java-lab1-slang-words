@@ -1,9 +1,11 @@
 package lab01.slangdict._24127430.io;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -209,15 +211,80 @@ class DictionaryStoreTest {
     }
 
     @Test
-    void corruptedDatIsRebuiltFromText() throws Exception {
+    void firstRunHasNothingToRecover() throws Exception {
+        try (DictionaryStore store = store(dir)) {
+            assertNull(store.loadOrBuild().recovery());
+            assertNull(store.loadOrBuild().recovery(), "đọc .dat tốt cũng không có gì để báo");
+        }
+    }
+
+    @Test
+    void corruptedDatIsKeptAsBackupThenRebuiltFromText() throws Exception {
         Path dat = dir.resolve("dictionary.dat");
-        Files.write(dat, new byte[] {1, 2, 3, 4, 5, 6, 7, 8, 9});
+        byte[] damaged = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+        Files.write(dat, damaged);
         try (DictionaryStore store = store(dir)) {
             DictionaryStore.LoadResult result = store.loadOrBuild();
             assertEquals(DictionaryStore.Source.TEXT, result.source());
             assertEquals(7638, result.dictionary().size());
+
+            DictionaryStore.Recovery recovery = result.recovery();
+            assertNotNull(recovery, "UI phải được báo là .dat đã bị build lại");
+            assertEquals(dir.resolve("dictionary.dat.bad"), recovery.backupFile());
+            assertNotNull(recovery.cause().getMessage());
         }
-        assertEquals(7638, DictionaryStore.load(dat).size(), ".dat hỏng đã được ghi lại bản tốt");
+        assertArrayEquals(damaged, Files.readAllBytes(dir.resolve("dictionary.dat.bad")),
+                "file cũ được giữ nguyên, không bị ghi đè");
+        assertEquals(7638, DictionaryStore.load(dat).size(), "dictionary.dat mới là bản tốt");
+    }
+
+    @Test
+    void userEditsSurviveInBackupWhenDatIsDamaged() throws Exception {
+        Path dat = dir.resolve("dictionary.dat");
+        try (DictionaryStore store = store(dir)) {
+            SlangDictionary d = store.loadOrBuild().dictionary();
+            d.add("ZZTOP", List.of("Added by the user"));
+            store.saveInBackground(d);
+        }
+        byte[] bytes = Files.readAllBytes(dat);
+        bytes[bytes.length / 2] ^= 0x01; // lật 1 bit giữa file (kịch bản của lỗi C2)
+        Files.write(dat, bytes);
+
+        try (DictionaryStore store = store(dir)) {
+            DictionaryStore.LoadResult result = store.loadOrBuild();
+            assertNotNull(result.recovery());
+            assertTrue(result.dictionary().idsByName("ZZTOP").isEmpty());
+        }
+        byte[] kept = Files.readAllBytes(dir.resolve("dictionary.dat.bad"));
+        assertArrayEquals(bytes, kept, "bản có slang người dùng thêm vẫn còn trên đĩa để cứu");
+    }
+
+    @Test
+    void earlierBackupIsNeverOverwritten() throws Exception {
+        Path dat = dir.resolve("dictionary.dat");
+        Files.write(dir.resolve("dictionary.dat.bad"), new byte[] {42});
+        Files.write(dat, new byte[] {1, 2, 3});
+        try (DictionaryStore store = store(dir)) {
+            assertEquals(dir.resolve("dictionary.dat.bad2"), store.loadOrBuild().recovery().backupFile());
+        }
+        assertArrayEquals(new byte[] {42}, Files.readAllBytes(dir.resolve("dictionary.dat.bad")));
+        assertArrayEquals(new byte[] {1, 2, 3}, Files.readAllBytes(dir.resolve("dictionary.dat.bad2")));
+    }
+
+    @Test
+    void ioErrorOtherThanDamageIsReportedWithoutOverwritingDat() throws Exception {
+        // dictionary.dat là thư mục: đọc ném IOException thường (AccessDenied trên Windows, "Is a directory"
+        // trên Linux), không phải DictionaryFormatException → giống file đang bị process khác giữ
+        Path dat = dir.resolve("dictionary.dat");
+        Files.createDirectory(dat);
+        Files.write(dat.resolve("marker"), new byte[] {7});
+        try (DictionaryStore store = store(dir)) {
+            IOException e = assertThrows(IOException.class, store::loadOrBuild);
+            assertFalse(e instanceof DictionaryFormatException, e.toString());
+        }
+        assertTrue(Files.isDirectory(dat), "không build lại và ghi đè khi chưa chắc file hỏng");
+        assertTrue(Files.exists(dat.resolve("marker")));
+        assertFalse(Files.exists(dir.resolve("dictionary.dat.bad")));
     }
 
     @Test

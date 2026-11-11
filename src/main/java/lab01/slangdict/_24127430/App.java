@@ -121,6 +121,9 @@ public final class App {
                         () -> exit(store, historyStore));
                 installScreens(mainFrame, new DictionaryService(loaded.dictionary(), store), history);
                 mainFrame.setVisible(true);
+                if (loaded.recovery() != null) {
+                    reportRecovery(loaded.recovery());
+                }
                 pendingSaveErrors.forEach(Runnable::run);
                 pendingSaveErrors.clear();
             }
@@ -164,6 +167,16 @@ public final class App {
         dictionary.addChangeListener(definitionQuiz::dictionaryChanged);
         frame.setScreen(Feature.Card.QUIZ_SLANG, slangQuiz);
         frame.setScreen(Feature.Card.QUIZ_DEFINITION, definitionQuiz);
+    }
+
+    /**
+     * Chạy trên EDT. dictionary.dat hỏng nên từ điển vừa được build lại từ slang.txt: phải nói cho người dùng biết
+     * các thay đổi trước đó không còn, và file cũ được giữ ở đâu.
+     */
+    private static void reportRecovery(DictionaryStore.Recovery recovery) {
+        String message = Messages.format("error.datRecovered", recovery.cause().getMessage(),
+                recovery.backupFile().toAbsolutePath().toString());
+        JOptionPane.showMessageDialog(mainFrame, message, Messages.get("error.title"), JOptionPane.WARNING_MESSAGE);
     }
 
     /** Chạy trên EDT. {@code dialogKey}: chữ của dialog cảnh báo, khác nhau cho từ điển và lịch sử. */

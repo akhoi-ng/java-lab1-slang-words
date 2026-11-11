@@ -17,7 +17,8 @@ App.main()  ── đọc data/settings.properties (ngôn ngữ, theme) → cài
   │
   ▼  SwingWorker (luồng nền), quá 0,3 s thì hiện cửa sổ "Đang tải…"
 Đọc data/dictionary.dat (từ điển ĐÃ INDEX sẵn từ lần chạy trước)
-  │   └─ nếu chưa có / bị hỏng → đọc slang.txt gốc bằng SlangFileParser → build index → lưu .dat
+  │   └─ nếu chưa có / bị hỏng (file hỏng được giữ lại thành dictionary.dat.bad và báo người dùng)
+  │        → đọc slang.txt gốc bằng SlangFileParser → build index → lưu .dat
   ▼
 MainFrame hiện lên: menu + sidebar 10 chức năng + các màn hình (CardLayout) + thanh trạng thái
   │
@@ -326,14 +327,26 @@ Phần quyết định được tách thành hàm thuần `resolveDataDir(...)` 
 ```
 có dictionary.dat? ──có──► load ──OK──► dùng luôn (Source.DAT)
         │                    │
-       không             lỗi (mọi IOException)
-        ▼                    ▼
+        │                    ├─ DictionaryFormatException (file hỏng)
+        │                    │     ▼
+        │                    │  đổi tên thành dictionary.dat.bad (đã có thì .bad2, .bad3…),
+        │                    │  ghi nhận Recovery(file .bad, lý do)
+        │                    │
+        │                    └─ IOException khác (bị khóa, không có quyền…)
+        │                          ▼
+        │                       ném lên → App báo lỗi rồi thoát, .dat giữ nguyên
+       không                 ▼
+        ▼◄───────────────────┘
    build từ slang.txt gốc (data/slang.txt nếu có, không thì bản nhúng trong jar)
         ▼
-   lưu dictionary.dat cho lần sau (Source.TEXT)
+   lưu dictionary.dat cho lần sau (Source.TEXT, kèm Recovery nếu có)
 ```
 
-`DictionaryFormatException` kế thừa `IOException`: mọi kiểu hỏng (sai magic, sai version, sai CRC, bị cắt cụt, class không khớp, dữ liệu rác, cấu trúc lồng quá sâu gây `StackOverflowError`) đều quy về **một** loại lỗi. Tuy vậy `loadOrBuild` hiện bắt **mọi** `IOException`, không riêng `DictionaryFormatException`: lỗi đọc tạm thời (file đang bị process khác giữ, không có quyền) cũng dẫn tới build lại rồi ghi đè `.dat`, và thay đổi của người dùng mất mà không có thông báo (lỗi C2 trong `AUDIT_REPORT.md`, chưa sửa).
+`DictionaryFormatException` kế thừa `IOException`: mọi kiểu hỏng (sai magic, sai version, sai CRC, bị cắt cụt, class không khớp, dữ liệu rác, cấu trúc lồng quá sâu gây `StackOverflowError`) đều quy về **một** loại lỗi. `loadOrBuild` chỉ build lại khi gặp **đúng** lỗi này (sửa lỗi C2 trong `AUDIT_REPORT.md`):
+- File hỏng không bị ghi đè mà được đổi tên thành `dictionary.dat.bad`; bản `.bad` có sẵn từ lần hỏng trước cũng không bị đè. Không đổi tên được thì ném lỗi chứ không ghi đè.
+- `LoadResult.recovery()` khác `null` thì `App` hiện dialog cảnh báo: các slang đã thêm/sửa/xóa trước đó không có trong dữ liệu hiện tại, kèm lý do và đường dẫn file `.bad`.
+- Lỗi I/O khác (file đang bị process khác giữ, không có quyền) có thể chỉ là tạm thời và file vẫn tốt, nên app báo lỗi rồi thoát, lần mở sau đọc lại bình thường.
+- Test: `corruptedDatIsKeptAsBackupThenRebuiltFromText`, `userEditsSurviveInBackupWhenDatIsDamaged` (lật 1 bit), `earlierBackupIsNeverOverwritten`, `ioErrorOtherThanDamageIsReportedWithoutOverwritingDat`.
 
 **Cấu trúc sâu khi serialize:** serialize mặc định của Java đi đệ quy theo từng tầng object. `Trie` mỗi ký tự của tên là một tầng `Node` → `TreeMap` → `Node`, nên một tên vài trăm ký tự đủ làm `ObjectInputStream` tràn stack khi đọc lại, và app không mở lại được nữa (lỗi C1). Cách xử lý:
 - `Trie` ghi dưới dạng phẳng qua `writeReplace` → `SerializedForm` (mảng key, số value của mỗi key, mảng value), duyệt bằng vòng lặp; khi đọc thì `readResolve` chèn lại từng key. `collect` (tìm PREFIX) và `remove` cũng dùng vòng lặp thay cho đệ quy. File `.dat` do bản cũ ghi vẫn đọc được vì `Trie` và `Node` giữ nguyên field và `serialVersionUID`.
@@ -783,7 +796,7 @@ vẫn chưa đủ?        thử entry khác làm đề (tối đa 20; từ đi�
 | `core/TokenizerTest` | Tách từ đúng và giữ thứ tự, giữ chữ Unicode, không phụ thuộc locale của máy (thử với locale Thổ Nhĩ Kỳ), chuẩn hóa tên giữ nguyên ký hiệu |
 | `core/SlangDictionaryTest` | Build từ file gốc đủ 7.638 entry, tra tên không phân biệt hoa thường, tên trùng là các entry riêng, **hàng nghìn thao tác ngẫu nhiên xong mọi index vẫn giống hệt từ điển build lại từ đầu**, serialize rồi đọc lại vẫn đúng |
 | `io/AppPathsTest` | 3 trường hợp chọn thư mục data (system property / chạy từ jar / chạy trong IDE), tự tạo thư mục |
-| `io/DictionaryStoreTest` | Lưu rồi đọc lại đúng; file sai magic/version/bị cắt cụt/chứa class lạ đều bị từ chối; **đổi bất kỳ byte nào cũng bị CRC phát hiện**; lần đầu build từ text, lần sau đọc `.dat`; `.dat` hỏng thì build lại; lưu dồn dập ra đúng trạng thái cuối; vừa sửa vừa lưu không ra file "nửa vời"; lỗi ghi nền được báo qua listener |
+| `io/DictionaryStoreTest` | Lưu rồi đọc lại đúng; file sai magic/version/bị cắt cụt/chứa class lạ đều bị từ chối; **đổi bất kỳ byte nào cũng bị CRC phát hiện**; lần đầu build từ text, lần sau đọc `.dat`; `.dat` hỏng thì giữ lại thành `.bad` (không đè bản `.bad` cũ) rồi build lại, lỗi I/O khác thì không ghi đè; lưu dồn dập ra đúng trạng thái cuối; vừa sửa vừa lưu không ra file "nửa vời"; lỗi ghi nền được báo qua listener |
 | `service/SearchServiceTest` | Từng mode × target trên từ điển nhỏ (kể cả ký hiệu `:\|`, tên trùng, AND, thưởng nguyên cụm, k = 0 cho từ ngắn); `limit` cắt đúng mà `totalMatches` vẫn đủ; luôn dùng từ điển hiện tại sau khi đổi (giống Reset); **so với cách duyệt tuần tự trên file gốc** cho cả 8 tổ hợp; gợi ý "Có phải bạn muốn tìm" (giữ cách viết gốc, không gợi ý lại chính query, sắp theo khoảng cách, chỉ sửa từ không có trong từ vựng) |
 | `service/SearchBenchmarkTest` | Build 100k, mỗi tổ hợp (cả query "nặng" như `e`, `a`) phải < 1 s; (bước 12) quiz F9/F10 trên 100k: câu đầu và trung bình 1.000 câu < 1 s (thực tế < 1 ms); in bảng thời gian ra console |
 | `tools/BigDataGeneratorTest` | Giữ nguyên entry gốc, id không trùng, tên tổng hợp không trùng và đúng dạng, cùng seed thì cùng dữ liệu, file ghi ra đọc lại được, `main` ghi đúng số lượng |
