@@ -137,7 +137,7 @@ class ResetActionTest {
 
     @Test
     void brokenOriginalFileShowsAnErrorAndKeepsEverything() throws Exception {
-        Files.writeString(dir.resolve("slang.txt"), "abc`First\n`no slang\n");
+        Files.writeString(dir.resolve("slang.txt"), "Slag`Meaning\n`no slang\n"); // không có dòng hợp lệ nào
         ui.answer = Optional.of(true);
         SlangDictionary before = service.current();
 

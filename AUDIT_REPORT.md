@@ -25,8 +25,8 @@ Yêu cầu nộp bài (mục 3), làm ở bước 13 của PLAN:
 
 | ID | Trạng thái | Ghi chú |
 |---|---|---|
-| IV.6 | Đã làm | Đánh dấu `[THAM KHẢO - CẢ FILE]` / `[THAM KHẢO]`…`[HẾT THAM KHẢO]` trong code, bảng nguồn và cách tính trong `README.md` mục 6: đếm được 928/7.101 dòng code ≈ 13%, khai 15% |
-| IV.8 | Đã làm phần trong repo | Có `README.md`, `24127430_TuChamDiem.txt` (còn điền họ tên, link video), jar build lại sau mọi sửa đổi và đã chạy thử ở thư mục khác (lần đầu build từ text, lần sau đọc `.dat`). Hình commit, video, file zip làm ngoài repo |
+| IV.6 | Đã làm | Đánh dấu `[THAM KHẢO - CẢ FILE]` / `[THAM KHẢO]`…`[HẾT THAM KHẢO]` trong code, bảng nguồn và cách tính trong `README.md` mục 6: đếm được 928/7.101 dòng code ≈ 13% lúc làm bước 13 (sau các lần sửa về sau: 928/7.176, vẫn ≈ 13%), khai 15% |
+| IV.8 | Đã làm phần trong repo | Có `README.md`, `24127430_TuChamDiem.txt` (còn điền link video), jar build lại sau mọi sửa đổi và đã chạy thử ở thư mục khác (lần đầu build từ text, lần sau đọc `.dat`). Hình commit, video, file zip làm ngoài repo |
 
 Mục 6 (tài liệu nói khác code):
 
@@ -53,6 +53,24 @@ Mục 7 (nghi vấn chưa kiểm chứng), kiểm chứng ngày 11/11/2026 sau c
 | Khởi động 100k khoảng 2 s có bị coi là chậm | Không đổi | Không thuộc 10 chức năng; có màn hình "Đang tải…", giao diện không đứng |
 
 Sau khi sửa: `.\mvnw.cmd package` 272/272 test pass, jar build lại lúc 14:24 ngày 11/11.
+
+## Audit cuối (11/11/2026, sau commit `859ef70`)
+
+Đọc lại toàn bộ `src/main/java` và chạy repro (ngoài repo) trên jar thật. Không còn lỗi Critical/High; mọi lỗi ở các bảng trên đã được sửa đúng trong code. Đã kiểm: F2 "Chứa chuỗi" với 3.005 từ khóa so với duyệt thô không sót slang nào; F1 2.000 tên × 4 kiểu khớp không sót; 100k qua store thật: lần đầu 1,65 s, đọc `.dat` 0,5–0,8 s, add 3 ms, mở lại còn slang vừa thêm.
+
+| Lỗi | Mức | Trạng thái | Ghi chú |
+|---|---|---|---|
+| N1 | Medium | Đã sửa | Một dòng sai định dạng trong `data/slang.txt` (slang không có nghĩa, không có tên, dòng đầu không có `` ` ``) làm app báo lỗi rồi thoát. Sửa: `SlangFileParser.parse` bỏ qua dòng lỗi và ghi ra stderr; chỉ ném `SlangFormatException` khi file không có dòng hợp lệ nào. Chạy lại repro trên jar mới: 4 file lỗi đều mở được |
+| N2 | Medium | Đã sửa (tài liệu) | `slang.txt` đặt cạnh jar không được đọc (app chỉ đọc `data/slang.txt`), người chấm thay file đó sẽ không thấy gì đổi. Thêm hướng dẫn vào `24127430_TuChamDiem.txt` và `README.md` mục 1 |
+| N3 | Low | Đã sửa | F8: mở màn hình thì focus ở "Random khác", Enter bấm nút đó thay vì "Tra trong từ điển" như tooltip ghi. Sửa: gỡ Enter khỏi input map của ba nút. Test `RandomPanelTest.enterOnTheFocusedRandomButtonLooksUpInsteadOfDrawingAnotherSlang` |
+| N4 | Low | Không sửa | Sau "Tra trong từ điển" (F8) hoặc tìm lại từ Lịch sử, F1 giữ kiểu khớp của lần đó (ví dụ "Chính xác") nên gõ không còn ra kết quả ngay; combo vẫn hiện đúng kiểu đang dùng |
+| N5 | Low | Không sửa | `ResetAction` chỉ bắt `Exception`: gặp `Error` (hết bộ nhớ) lúc build thì cửa sổ bị khóa. Chỉ đọc code, chưa tái hiện |
+| N6 | Low | Không sửa | Ở 100k, đóng app rồi mở lại trong khoảng 1 s có thể gặp dialog "đang mở ở cửa sổ khác" (lần ghi cuối mất 1,1 s, khóa còn giữ). Không mất dữ liệu |
+| N7 | Low | Không sửa | Tooltip danh sách trong `ConflictDialog` chưa qua `PlainText.tooltip`; dòng header `` Slag`Meaning `` không nằm ở dòng 1 thành một slang tên "Slag" |
+
+Tài liệu lệch code đã sửa cùng lúc: `README.md` (`Set<Integer>` thay cho `List<Integer>`, số test, số dòng code), `docs/PLAN.md` (số commit, giờ build jar, số test), `docs/ARCHITECTURE.md` (parser bỏ qua dòng lỗi, phím Enter ở F8, số test).
+
+Sau khi sửa: `.\mvnw.cmd package` 275/275 test pass, jar build lại lúc 19:05 ngày 11/11.
 
 ## 1. Tóm tắt
 

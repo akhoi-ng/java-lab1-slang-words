@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| Bước đang ở | **Xong và đã commit bước 0–13** (bước 13: `f9373d0`); đã sửa mọi lỗi C/H/M/L trong `AUDIT_REPORT.md` và 2 lỗi tìm ra khi kiểm chứng mục 7 của audit. Jar build lại lúc 14:24 ngày 11/11. Còn các việc ngoài repo ở checklist mục 6 (video, điền file tự chấm, hình commit, zip) |
-| Test | 272/272 pass (`.\mvnw.cmd package`, 11/11 14:24) |
-| Commit đã có | 27 commit trên 6 ngày (tính tới `f9373d0`): 04/11 (1), 05/11 (1), 08/11 (1), 09/11 (3), 10/11 (6), 11/11 (15) → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày). Đếm lại bằng `git rev-list --count HEAD` |
+| Bước đang ở | **Xong và đã commit bước 0–13** (bước 13: `f9373d0`); đã sửa mọi lỗi C/H/M/L trong `AUDIT_REPORT.md` và 2 lỗi tìm ra khi kiểm chứng mục 7 của audit. Lần audit cuối (11/11, mục "Audit cuối" trong `AUDIT_REPORT.md`) sửa thêm N1, N2, N3. Jar build lại lúc 19:05 ngày 11/11. Còn các việc ngoài repo ở checklist mục 6 (video, điền file tự chấm, hình commit, zip) |
+| Test | 275/275 pass (`.\mvnw.cmd package`, 11/11 19:05) |
+| Commit đã có | 29 commit trên 6 ngày (tính tới `859ef70`, chưa tính commit sửa lần audit cuối): 04/11 (1), 05/11 (1), 08/11 (1), 09/11 (3), 10/11 (6), 11/11 (17) → **đã đủ luật commit** (≥ 10 commit, ≥ 5 ngày). Đếm lại bằng `git rev-list --count HEAD` |
 | Thư mục `docs/` | `PLAN.md` và `ARCHITECTURE.md` đều đã được commit, git theo dõi bình thường |
 | Luật commit của đề | ≥ 10 commit **và** trải trên ≥ 5 ngày, nếu không đạt thì đồ án 0 điểm. **Bắt buộc phải có commit vào ngày 09/11 và 10/11.** Không sửa lùi ngày commit. |
 | Deadline | khoảng 10–11/11 (cần xác nhận lại trên Moodle) |
@@ -69,8 +69,8 @@
 | 04/11, 05/11, 08/11 | đã có | 3 |
 | 09/11 | bước 1, 2, 3 | 3 ✅ |
 | 10/11 | bước 4 → 7 + docs | 6 ✅ |
-| **11/11** | bước 8 → 13 + audit và sửa lỗi audit | 15 ✅ |
-| Tổng | | 27 commit trên 6 ngày ✓ |
+| **11/11** | bước 8 → 13 + audit và sửa lỗi audit | 17 ✅ |
+| Tổng | | 29 commit trên 6 ngày ✓ |
 
 ---
 
@@ -81,7 +81,7 @@
 3. ~~Sửa `JAVA_HOME` bị thiếu dấu cách (`C:\ProgramFiles\...`)~~ → đã sửa 10/11 (cấp User = `C:\Program Files\Java\jdk-18.0.2`).
 4. ~~Sửa 2 lỗi nhỏ tìm ra ở mục 7 của audit~~ → đã sửa kèm test, jar build lại 14:24 (ghi ở bước 13). Còn commit.
 5. Quay video, upload YouTube (Unlisted hoặc Public, không để Private).
-6. Điền họ tên + link video vào `24127430_TuChamDiem.txt`, commit.
+6. Điền link video vào `24127430_TuChamDiem.txt` (họ tên đã điền ở `859ef70`), commit.
 7. Sau commit cuối mới chụp hình lịch sử commit (`commits.png`), rồi nén zip theo checklist mục 6.
 8. Xem lại deadline trên Moodle.
 
@@ -414,12 +414,12 @@ và docs/ARCHITECTURE.md trước khi code.
 
 ## 6. Checklist nộp bài (mục IV của đề)
 
-- [x] ≥ 10 commit trải trên ≥ 5 ngày (27 commit / 6 ngày)
+- [x] ≥ 10 commit trải trên ≥ 5 ngày (29 commit / 6 ngày tính tới `859ef70`)
 - [x] 10 chức năng chạy đúng, mỗi chức năng < 1s với 100k slang
-- [x] `target/slang-dictionary.jar` chạy được bằng double-click / `java -jar` (build lại 11/11 14:24 sau khi sửa mục 7 của audit; **có commit code mới thì phải build lại**)
+- [x] `target/slang-dictionary.jar` chạy được bằng double-click / `java -jar` (build lại 11/11 19:05 sau khi sửa N1, N3 của lần audit cuối; **có commit code mới thì phải build lại**)
 - [x] File data (`slang.txt`)
 - [ ] Hình chụp lịch sử commit
-- [ ] File `.txt` tự chấm điểm từng chức năng + link video YouTube (`24127430_TuChamDiem.txt` đã có, **còn điền họ tên + link video**)
+- [ ] File `.txt` tự chấm điểm từng chức năng + link video YouTube (`24127430_TuChamDiem.txt` đã có, **còn điền link video**)
 - [ ] Video YouTube: cấu trúc dữ liệu, % tham khảo, demo trọn một chức năng
 - [x] Đánh dấu phần tham khảo trong code + khai tổng % tham khảo (15%, README mục 6)
 - [ ] Đặt tên file nộp `24127430_<điểm>.zip`, gồm source code, jar, data, hình commit, file txt:

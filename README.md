@@ -24,7 +24,8 @@ hoặc double-click file `slang-dictionary.jar`.
 - Mọi thay đổi (thêm, sửa, xóa, reset) được lưu lại vào `dictionary.dat`; lịch sử tìm kiếm lưu ở `data/history.dat`,
   ngôn ngữ/giao diện lưu ở `data/settings.properties`.
 - Nếu thư mục chứa jar không ghi được, dữ liệu được lưu ở `<thư mục người dùng>/.slang-dictionary` (app báo vị trí).
-- Muốn dùng file dữ liệu khác: đặt file vào `data/slang.txt` cạnh jar, xóa `data/dictionary.dat`, rồi mở lại app.
+- Muốn dùng file dữ liệu khác: đặt file vào `data/slang.txt` cạnh jar, xóa `data/dictionary.dat`, rồi mở lại app
+  (file `slang.txt` đặt ngay cạnh jar thì **không** được đọc). Dòng sai định dạng trong file bị bỏ qua.
 - Chỉ mở được một cửa sổ app cho mỗi thư mục `data/` (tránh hai cửa sổ ghi đè dữ liệu của nhau).
 
 ## 2. Chức năng
@@ -52,7 +53,7 @@ Không chỉ dùng List: mỗi kiểu tìm có một cấu trúc riêng để kh
 
 | Cấu trúc | Dùng cho | Độ phức tạp |
 |---|---|---|
-| `HashMap<Integer, SlangEntry>` + `HashMap<String, List<Integer>>` | lấy entry theo id, tra tên chính xác (không phân biệt hoa thường), slang trùng tên | O(1) |
+| `HashMap<Integer, SlangEntry>` + `HashMap<String, Set<Integer>>` | lấy entry theo id, tra tên chính xác (không phân biệt hoa thường), slang trùng tên | O(1) |
 | `Trie<V>` (tự viết, generic, con lưu bằng `TreeMap`) | tìm theo tiền tố tên slang, kết quả theo thứ tự từ điển | O(độ dài tiền tố + số kết quả) |
 | `InvertedIndex<K, V>` (tự viết, trên `TreeMap<K, Set<V>>`) | từ → các slang có definition chứa từ đó; tiền tố từ bằng `subMap` | O(log V) + số kết quả |
 | `BKTree<T>` + `Levenshtein` (tự viết, generic) | tìm gần đúng tên slang và từ trong definition (gõ sai 1–2 ký tự) | bỏ qua phần lớn cây nhờ bất đẳng thức tam giác |
@@ -83,7 +84,7 @@ Không cần cài Maven (đã có Maven Wrapper):
 ./mvnw package            (Linux/macOS)
 ```
 
-Lệnh này biên dịch, chạy 272 unit test (JUnit 5) và tạo `target/slang-dictionary.jar` (đã gộp FlatLaf, chạy độc lập).
+Lệnh này biên dịch, chạy 275 unit test (JUnit 5) và tạo `target/slang-dictionary.jar` (đã gộp FlatLaf, chạy độc lập).
 
 Cấu trúc mã nguồn (package `lab01.slangdict._24127430`):
 
@@ -137,7 +138,7 @@ Mọi chỗ tham khảo đều được đánh dấu trong code, tìm bằng t�
 | `pom.xml` (maven-shade-plugin) | Tài liệu maven-shade-plugin, "Executable JAR" |
 
 **Cách tính:** đếm dòng code (không tính dòng trống và chú thích) nằm trong các file/đoạn đánh dấu ở trên, chia cho
-tổng số dòng code của `src/main/java`: 928 / 7.153 ≈ 13%. Làm tròn lên **15%** để tính cả phần cấu hình `pom.xml`
+tổng số dòng code của `src/main/java`: 928 / 7.176 ≈ 13%. Làm tròn lên **15%** để tính cả phần cấu hình `pom.xml`
 và các chỗ dùng API theo Javadoc không đánh dấu từng dòng. Phần còn lại (logic từ điển, tìm kiếm và xếp hạng, lưu
 trữ, thêm/sửa/xóa, lịch sử, random, đố vui, giao diện các màn hình, unit test) là phần tự làm.
 

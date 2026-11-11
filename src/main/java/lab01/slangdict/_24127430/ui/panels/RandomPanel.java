@@ -209,6 +209,13 @@ public class RandomPanel extends JPanel implements FeatureScreen {
         randomButton.addActionListener(e -> showRandom());
         todayButton.addActionListener(e -> showToday());
         lookupButton.addActionListener(e -> lookupShown());
+        // Nút đang giữ focus tự nhận Enter là "bấm nút" (FlatLaf), mà mở màn hình thì focus nằm ở "Random khác":
+        // Enter sẽ random thay vì tra như tooltip ghi. Gỡ Enter khỏi các nút để phím tắt Enter của màn hình
+        // (bindKey bên dưới constructor) luôn là "Tra trong từ điển"; Space vẫn bấm nút đang focus.
+        for (JButton button : List.of(randomButton, todayButton, lookupButton)) {
+            button.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "none");
+            button.getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0, true), "none");
+        }
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         actions.add(randomButton);
         actions.add(Box.createHorizontalStrut(8));
@@ -311,6 +318,10 @@ public class RandomPanel extends JPanel implements FeatureScreen {
 
     JLabel slangLabel() {
         return slangLabel;
+    }
+
+    JButton randomButton() {
+        return randomButton;
     }
 
     boolean showingToday() {

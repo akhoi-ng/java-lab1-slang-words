@@ -57,10 +57,17 @@ public final class SlangFileParser {
     /**
      * Đọc toàn bộ entry; id được đánh theo thứ tự xuất hiện, bắt đầu từ 0.
      * Bỏ qua dòng trống và dòng header. Dòng không có '`' được thêm vào nghĩa của entry trước
-     * (bỏ nghĩa đã có); nếu chưa có entry nào thì ném {@link SlangFormatException}.
+     * (bỏ nghĩa đã có).
+     * <p>
+     * Dòng sai định dạng (không có tên slang, không có nghĩa nào, hoặc không có '`' mà chưa có entry nào trước nó)
+     * bị <b>bỏ qua</b> và ghi ra stderr: một dòng hỏng trong file 100k dòng không được làm cả app không mở được.
+     * Dòng như vậy không chứa cặp (slang, nghĩa) nào nên không mất dữ liệu. Chỉ khi file có dòng lỗi mà
+     * <b>không có dòng hợp lệ nào</b> (không phải file slang) mới ném {@link SlangFormatException} của dòng lỗi đầu tiên.
      */
     public static List<SlangEntry> parse(BufferedReader reader) throws IOException, SlangFormatException {
         List<SlangEntry> entries = new ArrayList<>();
+        SlangFormatException firstProblem = null;
+        int skipped = 0;
         String line;
         int lineNumber = 0;
         while ((line = reader.readLine()) != null) {
@@ -76,7 +83,21 @@ public final class SlangFileParser {
                 entries.set(last, withExtraMeanings(entries.get(last), line));
                 continue;
             }
-            entries.add(parseLine(line, entries.size(), lineNumber));
+            try {
+                entries.add(parseLine(line, entries.size(), lineNumber));
+            } catch (SlangFormatException e) {
+                skipped++;
+                if (firstProblem == null) {
+                    firstProblem = e;
+                }
+            }
+        }
+        if (firstProblem != null) {
+            if (entries.isEmpty()) {
+                throw firstProblem;
+            }
+            System.err.println("[SlangFileParser] skipped " + skipped + " malformed line(s), first: "
+                    + firstProblem.getMessage());
         }
         return entries;
     }

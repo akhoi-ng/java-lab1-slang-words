@@ -155,7 +155,7 @@ Những điểm khác:
 - Đọc file bằng **UTF-8**, vì có các slang như `` ELNS`Eller noe sånt `` và `®`.
 - Bỏ qua dòng header `` Slag`Meaning ``, dòng trống và ký tự BOM (một ký tự ẩn mà Notepad hay thêm vào đầu file).
 - Dòng không có dấu `` ` `` là **nghĩa bổ sung của slang ở dòng trước** (cắt theo `|`, bỏ nghĩa đã có). File gốc của đề có 5 dòng như vậy (`AMA`, `BOMB`, `C4C`, `ER`, `HOODIE`), ví dụ dòng `Against Medical Advice` ngay sau `` AMA`Ask Me Anything ``. Nhờ đó app đọc được cả file chưa sửa của đề (7.656 entry, 8.959 cặp) khi người chấm đặt nó vào `data/slang.txt`. Cách hiểu này giống `tools/fix_slang.py`.
-- Dòng sai định dạng ném **`SlangFormatException`** kèm số dòng, ví dụ *"Line 3: empty slang word"* hoặc *"Line 1: missing '`' separator"* (dòng không có `` ` `` mà chưa có slang nào trước nó). Đây là **checked exception** (kế thừa `Exception`), nên người gọi bắt buộc phải xử lý. Phần này đáp ứng chuẩn đầu ra G5.8 về quản lý ngoại lệ.
+- Dòng sai định dạng (không có tên slang, không có nghĩa, hoặc không có `` ` `` mà chưa có slang nào trước nó) bị **bỏ qua** và ghi ra stderr, các dòng còn lại vẫn được đọc: một dòng hỏng trong file 100k của người chấm không được làm app không mở được (lỗi N1 của lần audit cuối). Dòng như vậy không chứa cặp slang–nghĩa nào nên không mất dữ liệu. Chỉ khi file có dòng lỗi mà **không có dòng hợp lệ nào** thì ném **`SlangFormatException`** kèm số dòng của dòng lỗi đầu tiên, ví dụ *"Line 2: empty slang word"* hoặc *"Line 1: missing '`' separator"*. Đây là **checked exception** (kế thừa `Exception`), nên người gọi bắt buộc phải xử lý. Phần này đáp ứng chuẩn đầu ra G5.8 về quản lý ngoại lệ.
 - `try-with-resources` (`try (BufferedReader r = ...)`) tự đóng file kể cả khi có lỗi xảy ra.
 - `formatLine` / `write` làm chiều ngược lại: biến entry thành dòng text. Dùng để sinh file 100k slang.
 - id được đánh theo thứ tự dòng, bắt đầu từ 0.
@@ -537,7 +537,7 @@ EDT:        done(): đóng LoadingWindow → tạo MainFrame → hiện
 - `doInBackground()` chạy trên luồng nền; `done()` tự quay về EDT nên được phép tạo cửa sổ.
 - Nếu tải ngay trên EDT thì cửa sổ "Đang tải…" sẽ đứng hình, không vẽ được, vì EDT đang bận.
 - Cửa sổ loading chỉ hiện khi tải lâu hơn **300 ms** (dùng `javax.swing.Timer`). Với 7,6k slang (~0,1 s) nó không hiện, tránh cảnh cửa sổ chớp lên rồi tắt; với 100k slang (~1,6 s) thì có hiện.
-- Không tải được dữ liệu (ví dụ `slang.txt` sai định dạng) thì hiện dialog lỗi có số dòng rồi thoát.
+- Không tải được dữ liệu (ví dụ `data/slang.txt` không có dòng hợp lệ nào) thì hiện dialog lỗi có số dòng rồi thoát. Vài dòng sai định dạng lẫn trong file thì chỉ bị bỏ qua.
 
 **Thoát app an toàn:** cửa sổ dùng `DO_NOTHING_ON_CLOSE`. Khi bấm X (hoặc Ctrl+Q), app ẩn cửa sổ ngay, rồi một luồng riêng gọi `store.close()` (chờ luồng ghi nền lưu xong `.dat`) rồi mới `System.exit(0)`. Người dùng không phải nhìn một cửa sổ đứng hình 2 giây trong lúc từ điển 100k đang được lưu.
 
@@ -738,7 +738,7 @@ Ctrl+7 / Sidebar / menu Tệp → ResetAction.run()                       (EDT)
 ```
 
 - **Reset = thay cả object**, không xóa từng entry rồi thêm lại. Mọi nơi đọc từ điển đều đi qua `dictionaryService::current` (một `Supplier`, mục 4.9), nên chỉ cần gán lại **một field**. Field là `volatile` để luồng tìm kiếm thấy ngay object mới. Lần tìm đang chạy dở trên object cũ vẫn xong bình thường vì object cũ không bị ai sửa.
-- **Build trên luồng nền:** 7,6k slang mất ~0,1 s, file 100k mất ~0,5–0,7 s (trước khi sửa lỗi M2: 1,9–2,1 s, xem mục "Build index" ở 4.10), làm trên EDT thì cửa sổ đứng. Từ điển cũ không bị đụng tới trong lúc build, nên file gốc lỗi (thiếu, sai định dạng) chỉ làm hiện thông báo lỗi; từ điển và lịch sử giữ nguyên.
+- **Build trên luồng nền:** 7,6k slang mất ~0,1 s, file 100k mất ~0,5–0,7 s (trước khi sửa lỗi M2: 1,9–2,1 s, xem mục "Build index" ở 4.10), làm trên EDT thì cửa sổ đứng. Từ điển cũ không bị đụng tới trong lúc build, nên file gốc lỗi (thiếu, không có dòng hợp lệ nào) chỉ làm hiện thông báo lỗi; từ điển và lịch sử giữ nguyên.
 - **Khóa cửa sổ** (`frame.setEnabled(false)`) trong lúc build: nếu không, người dùng có thể kịp mở dialog Sửa trên entry sắp biến mất.
 - Dialog: nút mặc định (Enter) là **Hủy**, checkbox "Xóa cả lịch sử" mặc định **không** chọn (lịch sử trống thì checkbox bị tắt). Dialog ghi rõ đang có bao nhiêu slang và file gốc nằm ở đâu.
 - `ResetAction` nhận hai `Executor` (luồng nền, EDT) và một interface `Ui`. App truyền luồng mới + `SwingUtilities::invokeLater` + dialog thật; test truyền `Runnable::run` + giao diện giả nên chạy hết luồng mà không mở cửa sổ nào.
@@ -758,7 +758,7 @@ slang hôm nay   = entry có score cao nhất  (hòa thì id nhỏ hơn)
 
 **`RandomPanel`:**
 - Thẻ bo góc tự vẽ bằng Java2D (`RoundRectangle2D`, vạch màu nhấn bên trái được `clip` theo góc bo), màu lấy từ theme nên đổi sáng/tối vẫn đẹp. Thẻ cao vừa nội dung; slang nhiều nghĩa thì cả vùng cuộn được (panel cài `Scrollable` để luôn rộng bằng khung nhìn, chữ tự xuống dòng).
-- Nút: **Random khác** (R), **Về slang hôm nay** (H), **Tra trong từ điển** (Enter): mở slang đó ở màn hình tìm kiếm (EXACT) để xem, sửa hoặc xóa.
+- Nút: **Random khác** (R), **Về slang hôm nay** (H), **Tra trong từ điển** (Enter): mở slang đó ở màn hình tìm kiếm (EXACT) để xem, sửa hoặc xóa. Ba nút được gỡ phím Enter khỏi input map `WHEN_FOCUSED`: với FlatLaf, nút đang giữ focus tự coi Enter là "bấm nút", mà mở màn hình thì focus nằm ở "Random khác", nên Enter từng random thay vì tra (lỗi N3 của lần audit cuối). Space vẫn bấm nút đang focus.
 - Ngày hiện theo ngôn ngữ (`EEEE, dd/MM/yyyy` → "Thứ Tư, 11/11/2026"; `EEEE, MMMM d, yyyy` → "Wednesday, November 11, 2026").
 - Nghe `DictionaryService.addChangeListener`: slang đang hiện bị sửa thì hiện bản mới (đọc lại theo id), bị xóa thì chọn slang khác, sau Reset thì tính lại trên từ điển mới. Màn hình đang ẩn thì chỉ đánh dấu "cần tính lại" (`stale`), để dành tới lúc được mở.
 
@@ -818,7 +818,7 @@ Swing coi mọi chuỗi bắt đầu bằng `<html>` trên `JLabel`, `JButton`, 
 | File test | Kiểm tra gì |
 |---|---|
 | `io/OriginalDataResourceTest` | `slang.txt` có trong jar và đủ 7.638 entry |
-| `io/SlangFileParserTest` | Đọc đủ **7.638 entry và 8.941 cặp slang–nghĩa**, đối chiếu với cách tính độc lập. Slang chứa `\|`, UTF-8, BOM, dòng không có `` ` `` thành nghĩa mới của slang trước (như 5 dòng vỡ của file gốc), dòng lỗi báo đúng số dòng, ghi ra rồi đọc lại phải giống hệt |
+| `io/SlangFileParserTest` | Đọc đủ **7.638 entry và 8.941 cặp slang–nghĩa**, đối chiếu với cách tính độc lập. Slang chứa `\|`, UTF-8, BOM, dòng không có `` ` `` thành nghĩa mới của slang trước (như 5 dòng vỡ của file gốc), dòng lỗi bị bỏ qua (id vẫn liên tục, không nối nhầm vào slang trước), file không có dòng hợp lệ nào thì báo đúng số dòng lỗi đầu tiên, ghi ra rồi đọc lại phải giống hệt |
 | `model/ModelTest` | Kiểm tra dữ liệu đầu vào, so sánh bằng nhau theo id, thứ tự sắp xếp kết quả, quiz bắt buộc có 4 đáp án |
 | `ds/DataStructuresTest` | Levenshtein ra đúng giá trị đã biết. Trie và BK-tree được **so với cách duyệt tuần tự** trên 2.000–3.000 từ ngẫu nhiên và phải ra kết quả giống hệt. Lưu xuống `.dat` rồi đọc lại vẫn đúng |
 | `core/TokenizerTest` | Tách từ đúng và giữ thứ tự, giữ chữ Unicode, không phụ thuộc locale của máy (thử với locale Thổ Nhĩ Kỳ), chuẩn hóa tên giữ nguyên ký hiệu |
@@ -849,7 +849,7 @@ Swing coi mọi chuỗi bắt đầu bằng `<html>` trên `JLabel`, `JButton`, 
 
 Bước 10 cũng thêm vào `DictionaryStoreTest` (hoãn ghi thì chưa ghi ngay nhưng hết giờ là ghi; `close()` ghi ngay lần đang hẹn giờ 60 s) và `SearchServiceTest` (thời gian tìm không tính lúc chờ khóa).
 
-Tổng cộng **272 test** (232 tới hết bước 12, phần còn lại thêm khi sửa các lỗi trong `AUDIT_REPORT.md`). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống; bước 10 chạy jar thật ở 7,6k và 100k (thêm, thêm trùng → thêm nghĩa / tạo bản mới, đổi tên trùng 2 mục → quay lại, xóa, theme sáng + English) rồi đọc lại `dictionary.dat` sau khi thoát; bước 11 chạy app thật (harness tự bấm, chụp màn hình): slang hôm nay, Random khác, slang 14 nghĩa dài (xuống dòng + cuộn), theme sáng + English, Tra trong từ điển, dialog Reset có tick "xóa cả lịch sử", thông báo kết quả, thanh trạng thái, Lịch sử trống sau Reset; bước 12 chạy jar thật (harness tự bấm, chụp màn hình): F9 theme tối/tiếng Việt (câu hỏi, chọn sai, chọn đúng), F10 theme sáng/English, lượt 10 câu ra bảng tổng kết, đổi theme/ngôn ngữ trên bảng tổng kết.
+Tổng cộng **275 test** (232 tới hết bước 12, phần còn lại thêm khi sửa các lỗi trong `AUDIT_REPORT.md`). Phần giao diện được kiểm tra thêm bằng cách chạy jar thật: đổi ngôn ngữ/theme, mở lại app thấy cài đặt được nhớ, chạy với 100k slang thấy màn hình loading; bước 8 chạy thử tìm-khi-gõ, Ctrl+2, gợi ý khi gõ sai, tô từ khóa ở cả theme sáng và tối; bước 9 chạy thử ghi lịch sử, Enter tìm lại, Delete xóa dòng, tắt app mở lại vẫn còn lịch sử, đổi ngôn ngữ/theme, màn hình trống; bước 10 chạy jar thật ở 7,6k và 100k (thêm, thêm trùng → thêm nghĩa / tạo bản mới, đổi tên trùng 2 mục → quay lại, xóa, theme sáng + English) rồi đọc lại `dictionary.dat` sau khi thoát; bước 11 chạy app thật (harness tự bấm, chụp màn hình): slang hôm nay, Random khác, slang 14 nghĩa dài (xuống dòng + cuộn), theme sáng + English, Tra trong từ điển, dialog Reset có tick "xóa cả lịch sử", thông báo kết quả, thanh trạng thái, Lịch sử trống sau Reset; bước 12 chạy jar thật (harness tự bấm, chụp màn hình): F9 theme tối/tiếng Việt (câu hỏi, chọn sai, chọn đúng), F10 theme sáng/English, lượt 10 câu ra bảng tổng kết, đổi theme/ngôn ngữ trên bảng tổng kết.
 
 Test có ghi file dùng `testutil/ScratchDir` thay cho `@TempDir`: trên Windows, trình diệt virus đôi khi còn giữ file vừa ghi, khiến `@TempDir` dọn dẹp thất bại và đánh fail cả test dù test đúng.
 

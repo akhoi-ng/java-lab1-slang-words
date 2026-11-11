@@ -50,6 +50,16 @@ NỘI DUNG BÀI NỘP
 =====================================================================
 - source/                 : mã nguồn (Maven project)
 - slang-dictionary.jar    : chương trình (java -jar slang-dictionary.jar, cần Java 17+)
-- slang.txt               : file dữ liệu
+- slang.txt               : file dữ liệu (bản này đã nhúng sẵn trong file jar)
 - commits.png             : hình chụp lịch sử commit
 - 24127430_TuChamDiem.txt : file này
+
+=====================================================================
+DÙNG FILE DỮ LIỆU KHÁC (ví dụ file 100.000 slang word)
+=====================================================================
+Chương trình đọc slang.txt nhúng trong jar, KHÔNG đọc file slang.txt đặt cạnh jar.
+Muốn chạy với file khác:
+  1. Đặt file vào data/slang.txt (thư mục data nằm cạnh file jar, tự có sau lần chạy đầu).
+  2. Xóa data/dictionary.dat (nếu có) rồi mở lại chương trình,
+     hoặc đang mở thì dùng chức năng 7 (Khôi phục dữ liệu gốc).
+Dòng sai định dạng trong file bị bỏ qua, các dòng còn lại vẫn được đọc.

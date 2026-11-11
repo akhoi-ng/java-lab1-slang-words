@@ -310,12 +310,22 @@ class DictionaryStoreTest {
     }
 
     @Test
-    void badOriginalTextReportsLineNumber() throws Exception {
-        Files.writeString(dir.resolve("slang.txt"), "Slag`Meaning\nLOL`Laughing\n`broken line\n",
+    void badLinesInOriginalTextAreSkipped() throws Exception {
+        Files.writeString(dir.resolve("slang.txt"), "Slag`Meaning\nLOL`Laughing\n`broken line\nABC`\nBRB`Be right back\n",
                 StandardCharsets.UTF_8);
         try (DictionaryStore store = store(dir)) {
+            DictionaryStore.LoadResult loaded = store.loadOrBuild();
+            assertEquals(DictionaryStore.Source.TEXT, loaded.source());
+            assertEquals(2, loaded.dictionary().size(), "một dòng hỏng không làm app không mở được");
+        }
+    }
+
+    @Test
+    void originalTextWithoutAnyValidLineReportsLineNumber() throws Exception {
+        Files.writeString(dir.resolve("slang.txt"), "Slag`Meaning\n`broken line\n", StandardCharsets.UTF_8);
+        try (DictionaryStore store = store(dir)) {
             SlangFormatException e = assertThrows(SlangFormatException.class, store::loadOrBuild);
-            assertEquals(3, e.getLineNumber());
+            assertEquals(2, e.getLineNumber());
         }
     }
 

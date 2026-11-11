@@ -150,6 +150,33 @@ class RandomPanelTest {
         assertEquals(List.of(todaysPick().getSlang()), lookedUp);
     }
 
+    /**
+     * Mở màn hình thì focus nằm ở nút "Random khác". Với FlatLaf, nút đang focus tự coi Enter là "bấm nút", nên Enter
+     * từng random slang khác thay vì tra như tooltip ghi.
+     */
+    @Test
+    void enterOnTheFocusedRandomButtonLooksUpInsteadOfDrawingAnotherSlang() throws Exception {
+        open();
+        onEdt(() -> {
+            // Giả lập input map của FlatLaf (test chạy với L&F mặc định, nút không có sẵn phím Enter)
+            javax.swing.InputMap fromLaf = new javax.swing.InputMap();
+            fromLaf.put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0), "pressed");
+            fromLaf.put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0, true), "released");
+            javax.swing.JButton button = panel.randomButton();
+            button.getInputMap().setParent(fromLaf);
+
+            java.awt.KeyboardFocusManager manager = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
+            long when = System.currentTimeMillis();
+            for (int id : new int[] {java.awt.event.KeyEvent.KEY_PRESSED, java.awt.event.KeyEvent.KEY_RELEASED}) {
+                manager.redispatchEvent(button, new java.awt.event.KeyEvent(button, id, when, 0,
+                        java.awt.event.KeyEvent.VK_ENTER, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+            }
+        });
+
+        assertEquals(List.of(todaysPick().getSlang()), lookedUp);
+        assertTrue(get(panel::showingToday), "Enter không được random slang khác");
+    }
+
     @Test
     void emptyDictionaryShowsAHint() throws Exception {
         dictionary.set(new SlangDictionary());

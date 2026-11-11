@@ -114,16 +114,21 @@ class SlangFileParserTest {
     }
 
     @Test
-    void malformedLinesReportLineNumber() {
+    void malformedLinesAreSkippedAndTheRestIsKept() throws Exception {
+        // dòng 2: không có '`' mà chưa có entry nào; dòng 4: không có tên; dòng 5, 6: không có nghĩa
+        List<SlangEntry> entries = parse("Slag`Meaning\nbroken line\nLOL`Laugh\n`no slang\nABC`\nDEF`  |  \nXYZ`ok\n");
+        assertEquals(List.of("LOL", "XYZ"), entries.stream().map(SlangEntry::getSlang).toList());
+        assertEquals(List.of("Laugh"), entries.get(0).getMeanings(), "dòng lỗi không bị nối vào slang trước");
+        assertEquals(List.of(0, 1), entries.stream().map(SlangEntry::getId).toList(), "id vẫn liên tục");
+    }
+
+    @Test
+    void fileWithoutAnyValidLineReportsTheFirstBadLine() {
         SlangFormatException orphan =
-                assertThrows(SlangFormatException.class, () -> parse("Slag`Meaning\nbroken line\nLOL`Laugh"));
+                assertThrows(SlangFormatException.class, () -> parse("Slag`Meaning\nbroken line\n`no slang"));
         assertEquals(2, orphan.getLineNumber(), "dòng không có '`' mà chưa có entry nào trước nó");
 
-        SlangFormatException emptySlang =
-                assertThrows(SlangFormatException.class, () -> parse("Slag`Meaning\nLOL`Laugh\n`no slang"));
-        assertEquals(3, emptySlang.getLineNumber());
-
-        assertThrows(SlangFormatException.class, () -> parse("`no slang"));
+        assertEquals(1, assertThrows(SlangFormatException.class, () -> parse("`no slang")).getLineNumber());
         assertThrows(SlangFormatException.class, () -> parse("LOL`  |  "));
     }
 
