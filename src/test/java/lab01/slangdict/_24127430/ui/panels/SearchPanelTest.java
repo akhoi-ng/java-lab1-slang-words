@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
@@ -65,6 +67,69 @@ class SearchPanelTest {
         assertEquals(SearchTarget.SLANG, item.target());
         assertEquals(SearchMode.PREFIX, item.mode());
         assertEquals("lol", item.query());
+    }
+
+    @Test
+    void searchAsYouTypeIsRecordedOnceTheUserStopsTyping() throws Exception {
+        type("l");
+        type("lo");
+        assertTrue(history.isEmpty(), "chữ gõ dở không vào lịch sử");
+        type("lol");
+        assertEquals(List.of("LOL", "lol", "LOLZ"), slangColumn());
+        assertTrue(history.isEmpty());
+
+        onEdt(panel::fireHistoryTimer); // người dùng ngừng gõ HISTORY_DELAY_MS
+
+        assertEquals(1, history.size());
+        HistoryItem item = history.get(0);
+        assertEquals(SearchTarget.SLANG, item.target());
+        assertEquals(SearchMode.PREFIX, item.mode());
+        assertEquals("lol", item.query());
+        onEdt(panel::fireHistoryTimer);
+        assertEquals(1, history.size(), "mỗi kết quả chỉ ghi một lần");
+    }
+
+    @Test
+    void typingAgainBeforeTheDelayCancelsTheRecord() throws Exception {
+        type("lo");
+        assertTrue(panel.historyPending());
+        onEdt(() -> panel.queryField().setText("lol")); // gõ tiếp trước khi hết 1,5 s
+        assertFalse(panel.historyPending());
+
+        onEdt(() -> panel.queryField().setText(""));
+        assertFalse(panel.historyPending(), "xóa ô tìm thì không ghi gì");
+        assertTrue(history.isEmpty());
+    }
+
+    @Test
+    void movingIntoTheResultsRecordsRightAway() throws Exception {
+        type("lol");
+        onEdt(() -> { // như bấm chuột vào bảng / nhấn ↓ (test không mở cửa sổ nên không có focus thật)
+            FocusEvent gained = new FocusEvent(panel.table(), FocusEvent.FOCUS_GAINED);
+            for (FocusListener listener : panel.table().getFocusListeners()) {
+                listener.focusGained(gained);
+            }
+        });
+        assertEquals(List.of("lol"), history.stream().map(HistoryItem::query).collect(Collectors.toList()));
+        assertFalse(panel.historyPending());
+    }
+
+    @Test
+    void enterAfterTypingRecordsOnlyOnce() throws Exception {
+        type("lol");
+        onEdt(() -> panel.queryField().postActionEvent());
+        flushEdt();
+        onEdt(panel::fireHistoryTimer);
+        assertEquals(1, history.size());
+    }
+
+    @Test
+    void searchesThatOnlyRefreshDataAreNotRecorded() throws Exception {
+        typeAndPressEnter("lol");
+        onEdt(panel::refresh); // sau khi thêm/sửa/xóa
+        flushEdt();
+        onEdt(panel::fireHistoryTimer);
+        assertEquals(1, history.size());
     }
 
     @Test
@@ -157,6 +222,15 @@ class SearchPanelTest {
         onEdt(() -> {
             panel.queryField().setText(query);
             panel.queryField().postActionEvent(); // giống nhấn Enter
+        });
+        flushEdt();
+    }
+
+    /** Gõ vào ô tìm (mode mặc định SLANG + PREFIX tìm ngay khi gõ), không chờ debounce. */
+    private void type(String query) throws Exception {
+        onEdt(() -> {
+            panel.queryField().setText(query);
+            panel.fireLiveTimer();
         });
         flushEdt();
     }

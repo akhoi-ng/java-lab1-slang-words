@@ -10,6 +10,9 @@ import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -96,7 +99,11 @@ import lab01.slangdict._24127430.ui.ThemeManager;
  * <p>
  * <b>Tìm khi đang gõ:</b> chỉ ở SLANG + PREFIX (kiểu "autocomplete"), chờ người dùng ngừng gõ
  * {@value #LIVE_DELAY_MS} ms rồi mới tìm (debounce). Các mode khác tìm khi nhấn Enter hoặc nút Tìm.
- * Chỉ lần tìm "thật" (Enter, nút Tìm, bấm gợi ý) mới được báo cho {@link #setSearchListener} để ghi lịch sử.
+ * <p>
+ * <b>Lịch sử:</b> lần tìm "thật" (Enter, nút Tìm, bấm gợi ý) được báo ngay cho {@link #setSearchListener}.
+ * Kết quả tìm khi đang gõ (hoặc tìm lại khi đổi target/mode) chỉ được ghi khi người dùng đã dừng ở đó:
+ * ngừng gõ {@value #HISTORY_DELAY_MS} ms, chuyển vào bảng kết quả, hoặc rời màn hình Search. Nhờ vậy gõ "lol" rồi
+ * mở Lịch sử là thấy "lol", còn các chữ gõ dở "l", "lo" không bị ghi.
  */
 public class SearchPanel extends JPanel implements FeatureScreen {
 
@@ -106,6 +113,8 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     static final int SUGGESTION_LIMIT = 5;
     /** Debounce khi tìm lúc đang gõ. */
     static final int LIVE_DELAY_MS = 150;
+    /** Kết quả tìm khi đang gõ đứng yên bao lâu thì được ghi vào lịch sử. */
+    static final int HISTORY_DELAY_MS = 1500;
     /** Chỉ hiện "Đang tìm…" nếu việc tìm lâu hơn mức này, tránh chữ nhấp nháy với các query chỉ mất vài ms. */
     static final int BUSY_DELAY_MS = 120;
 
@@ -166,6 +175,9 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     private final Map<SearchTarget, SearchMode> modeByTarget = new EnumMap<>(SearchTarget.class);
     private final Timer liveTimer;
     private final Timer busyTimer;
+    private final Timer historyTimer;
+    /** Kết quả tìm khi đang gõ đang hiện nhưng chưa ghi vào lịch sử (null nếu không có). */
+    private Request pendingHistory;
     private final AtomicLong generation = new AtomicLong();
     /** Yêu cầu của kết quả đang hiện (null nếu bảng đang trống vì chưa tìm). */
     private Request shownRequest;
@@ -198,10 +210,25 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         modeByTarget.put(SearchTarget.SLANG, SearchMode.PREFIX);
         modeByTarget.put(SearchTarget.DEFINITION, SearchMode.EXACT);
 
-        liveTimer = new Timer(LIVE_DELAY_MS, e -> runSearch(currentRequest(), Selection.BEST));
+        liveTimer = new Timer(LIVE_DELAY_MS, e -> liveSearch());
         liveTimer.setRepeats(false);
         busyTimer = new Timer(BUSY_DELAY_MS, e -> setStatus(Status.SEARCHING));
         busyTimer.setRepeats(false);
+        historyTimer = new Timer(HISTORY_DELAY_MS, e -> recordPendingHistory());
+        historyTimer.setRepeats(false);
+        // Rời màn hình Search (CardLayout ẩn panel) trong lúc kết quả gõ dở đang hiện → ghi luôn
+        addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && !isShowing()) {
+                recordPendingHistory();
+            }
+        });
+        // Chuyển vào bảng kết quả (bấm chuột, phím ↓, Tab) nghĩa là đã chọn xem kết quả này → ghi luôn
+        table.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                recordPendingHistory();
+            }
+        });
 
         add(buildSearchBar(), BorderLayout.NORTH);
         add(buildResultArea(), BorderLayout.CENTER);
@@ -233,7 +260,10 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         SwingUtilities.invokeLater(queryField::requestFocusInWindow);
     }
 
-    /** Nhận mỗi lần tìm "thật" (Enter, nút Tìm, bấm gợi ý). Bước 9 nối vào HistoryService. */
+    /**
+     * Nhận mỗi lần tìm cần ghi lịch sử: tìm "thật" (Enter, nút Tìm, bấm gợi ý) và kết quả tìm khi đang gõ mà người
+     * dùng đã dừng lại xem (xem mô tả class). Bước 9 nối vào HistoryService.
+     */
     public void setSearchListener(Consumer<HistoryItem> listener) {
         searchListener = Objects.requireNonNull(listener, "listener");
     }
@@ -530,14 +560,39 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         rerunIfShowing();
     }
 
-    /** Đổi target hoặc mode khi đang có kết quả → tìm lại luôn với query hiện tại (không ghi lịch sử). */
+    /**
+     * Đổi target hoặc mode khi đang có kết quả → tìm lại luôn với query hiện tại. Kết quả mới được ghi lịch sử như
+     * tìm khi đang gõ (khi người dùng dừng lại xem).
+     */
     private void rerunIfShowing() {
         liveTimer.stop();
+        cancelPendingHistory();
         if (queryField.getText().isBlank()) {
             clearResults();
         } else if (shownRequest != null || isLiveMode()) {
-            runSearch(currentRequest(), Selection.BEST);
+            runSearch(currentRequest(), Selection.BEST, true);
         }
+    }
+
+    /** Tìm khi đang gõ (hết thời gian debounce). */
+    private void liveSearch() {
+        liveTimer.stop();
+        runSearch(currentRequest(), Selection.BEST, true);
+    }
+
+    /** Ghi kết quả tìm khi đang gõ đang hiện vào lịch sử (nếu có); gọi khi người dùng đã dừng lại xem. */
+    private void recordPendingHistory() {
+        historyTimer.stop();
+        Request request = pendingHistory;
+        pendingHistory = null;
+        if (request != null) {
+            searchListener.accept(new HistoryItem(request.target(), request.mode(), request.query(), LocalDateTime.now()));
+        }
+    }
+
+    private void cancelPendingHistory() {
+        historyTimer.stop();
+        pendingHistory = null;
     }
 
     private void onQueryEdited() {
@@ -545,6 +600,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             return;
         }
         clearNotice();
+        cancelPendingHistory(); // còn đang gõ: chữ gõ dở không vào lịch sử
         if (queryField.getText().isBlank()) {
             liveTimer.stop();
             clearResults();
@@ -560,6 +616,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     /** Tìm "thật": Enter, nút Tìm, bấm gợi ý. Được ghi vào lịch sử. */
     private void submit() {
         liveTimer.stop();
+        cancelPendingHistory(); // lần tìm này tự ghi lịch sử bên dưới
         clearNotice();
         String query = queryField.getText().strip();
         if (query.isEmpty()) {
@@ -580,8 +637,17 @@ public class SearchPanel extends JPanel implements FeatureScreen {
         return modeByTarget.get(target);
     }
 
-    /** Gửi việc tìm sang luồng nền; kết quả về EDT ở {@link #showOutcome}, chọn sẵn dòng theo {@code selection}. */
+    /** Tìm không ghi lịch sử (lịch sử đã ghi ở {@link #submit}, hoặc chỉ là tìm lại sau khi dữ liệu đổi). */
     private void runSearch(Request request, Selection selection) {
+        runSearch(request, selection, false);
+    }
+
+    /**
+     * Gửi việc tìm sang luồng nền; kết quả về EDT ở {@link #showOutcome}, chọn sẵn dòng theo {@code selection}.
+     *
+     * @param live tìm khi đang gõ / đổi mode: kết quả hiện ra thì chờ người dùng dừng lại rồi mới ghi lịch sử
+     */
+    private void runSearch(Request request, Selection selection, boolean live) {
         if (request.query().isEmpty()) {
             clearResults();
             return;
@@ -609,6 +675,12 @@ public class SearchPanel extends JPanel implements FeatureScreen {
             SwingUtilities.invokeLater(() -> {
                 if (generation.get() == ticket) { // kết quả cũ về muộn thì bỏ
                     showOutcome(request, finalOutcome, finalSuggestions, finalError, selection);
+                    if (live && finalError == null) {
+                        pendingHistory = request;
+                        historyTimer.restart();
+                    } else if (!request.equals(pendingHistory)) {
+                        cancelPendingHistory(); // đang hiện một lần tìm khác
+                    }
                 }
             });
         });
@@ -665,6 +737,7 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     private void clearResults() {
         generation.incrementAndGet(); // bỏ mọi kết quả đang chờ
         busyTimer.stop();
+        cancelPendingHistory();
         shownRequest = null;
         shownOutcome = null;
         shownSuggestions = List.of();
@@ -996,6 +1069,25 @@ public class SearchPanel extends JPanel implements FeatureScreen {
     /** Bấm gợi ý thứ {@code index} như người dùng. */
     void clickSuggestion(int index) {
         applySuggestion(shownSuggestions.get(index));
+    }
+
+    /** Không chờ debounce: nếu đang chờ tìm khi gõ thì tìm ngay. */
+    void fireLiveTimer() {
+        if (liveTimer.isRunning()) {
+            liveSearch();
+        }
+    }
+
+    /** Có kết quả tìm khi gõ đang chờ ghi lịch sử (đồng hồ {@value #HISTORY_DELAY_MS} ms đang chạy). */
+    boolean historyPending() {
+        return pendingHistory != null && historyTimer.isRunning();
+    }
+
+    /** Không chờ {@value #HISTORY_DELAY_MS} ms: chạy ngay việc đồng hồ lịch sử sẽ làm. */
+    void fireHistoryTimer() {
+        if (historyTimer.isRunning()) {
+            recordPendingHistory();
+        }
     }
 
     // ===================== Model của bảng =====================
